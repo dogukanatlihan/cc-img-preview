@@ -50,6 +50,8 @@ const EXTENSIONS: Record<string, string> = {
   'image/bmp': 'bmp',
   'image/svg+xml': 'svg',
   'image/avif': 'avif',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
   'image/tiff': 'tif',
 }
 

@@ -13,6 +13,8 @@ export const IMAGE_EXTS: readonly string[] = [
   'tiff',
   'avif',
   'ico',
+  'heic',
+  'heif',
 ]
 
 const EXT = /\.([A-Za-z0-9]+)$/

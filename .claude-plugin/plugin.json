@@ -1,6 +1,6 @@
 {
   "name": "cc-img",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Thumbnails for every image Claude touches, click to open",
   "author": { "name": "Dogukan Atlihan", "url": "https://github.com/dogukanatlihan" },
   "homepage": "https://github.com/dogukanatlihan/cc-img-preview",

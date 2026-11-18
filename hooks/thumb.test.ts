@@ -38,6 +38,21 @@ test('a format the system cannot read needs a tool that is installed', async () 
   expect(helperFor({ ...mac, tools: { ...none, magick: true } }, 'a.avif')).toBe('magick')
 })
 
+test('HEIC is read by sips on macOS and by ImageMagick elsewhere, and never by ffmpeg', async () => {
+  const both = { ffmpeg: true, magick: true, rsvg: false }
+
+  expect(helperFor(mac, 'IMG_0001.HEIC')).toBe('sips')
+  expect(helperFor({ ...mac, tools: both }, 'a.heif')).toBe('sips')
+  expect(helperFor(win, 'a.heic')).toBeUndefined()
+  expect(helperFor({ ...win, tools: both }, 'a.heic')).toBe('magick')
+  // An ffmpeg before 7.0 answers with one tile of a phone's photo.
+  expect(helperFor({ ...linux, tools: { ...none, ffmpeg: true } }, 'a.heic')).toBeUndefined()
+
+  const { run, runs } = fake(() => ok('4032 3024'))
+  await makeThumb(run, { ...linux, tools: both }, { src: '/p/a.heif', id: 't1', png: false })
+  expect(runs.find(one => one.argv[0] === 'magick')?.argv[1]).toBe('heic:/p/a.heif[0]')
+})
+
 test('Linux has no reader of its own', async () => {
   expect(helperFor(linux, 'a.png')).toBeUndefined()
   expect(helperFor({ ...linux, tools: { ...none, magick: true } }, 'a.png')).toBe('magick')

@@ -64,7 +64,7 @@ export type Helper = 'powershell' | 'sips' | 'ffmpeg' | 'magick' | 'rsvg'
 export const TIMEOUT_MS = 5000
 
 const WINDOWS_READS = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tif', 'tiff', 'ico']
-const MACOS_READS = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tif', 'tiff']
+const MACOS_READS = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif']
 /** What `sips` reads only on a newer macOS (webp from 11, avif from 13): tried where nothing else can. */
 const MACOS_READS_LATER = ['webp', 'avif', 'ico']
 
@@ -85,7 +85,15 @@ const MAGICK_READERS: Record<string, string> = {
   tiff: 'tiff',
   avif: 'avif',
   ico: 'ico',
+  heic: 'heic',
+  heif: 'heic',
 }
+
+/**
+ * Not given to ffmpeg: a phone's HEIC photo is a grid of tiles, and an ffmpeg
+ * before 7.0 answers with one tile of it, a wrong picture with no error.
+ */
+const NOT_FFMPEG = ['heic', 'heif']
 
 const join = (env: Pick<Env, 'platform'>, ...parts: string[]) => parts.join(env.platform === 'win32' ? '\\' : '/')
 
@@ -99,7 +107,7 @@ export function helperFor(env: Env, src: string): Helper | undefined {
   if (env.platform === 'darwin' && MACOS_READS.includes(ext)) return 'sips'
 
   if (env.tools.magick) return 'magick'
-  if (env.tools.ffmpeg) return 'ffmpeg'
+  if (env.tools.ffmpeg && !NOT_FFMPEG.includes(ext)) return 'ffmpeg'
 
   return env.platform === 'darwin' && MACOS_READS_LATER.includes(ext) ? 'sips' : undefined
 }

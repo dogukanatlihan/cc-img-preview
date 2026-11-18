@@ -2,6 +2,13 @@
 
 Versions follow [Semantic Versioning](https://semver.org). The version is the one in `.claude-plugin/plugin.json`, and each release has a git tag: `cc-img--v<version>` from 0.2.1 on (the form `claude plugin tag` makes), `v<version>` before that.
 
+## 0.2.3 - 2026-11-18
+
+HEIC.
+
+- `.heic` and `.heif` files get a thumbnail. macOS reads them with nothing installed (`sips`); Windows and Linux need ImageMagick built with HEIC support.
+- HEIC is never given to `ffmpeg`: a phone's photo is a grid of tiles, and an `ffmpeg` before 7.0 answers with one tile of it.
+
 ## 0.2.2 - 2026-11-18
 
 Real pictures in Rex.

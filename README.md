@@ -164,10 +164,10 @@ The mod keeps one cell size for all terminals. If you use two terminals with dif
 | System | Works with nothing installed | Needs `ffmpeg` or ImageMagick |
 | --- | --- | --- |
 | Windows | png, jpg, gif, bmp, tif, ico | webp, avif |
-| macOS | png, jpg, gif, bmp, tif; on a newer macOS also webp (from macOS 11), avif (from macOS 13) and ico | webp, avif and ico on an older macOS |
+| macOS | png, jpg, gif, bmp, tif, heic, heif; on a newer macOS also webp (from macOS 11), avif (from macOS 13) and ico | webp, avif and ico on an older macOS |
 | Linux | none | all of them |
 
-SVG needs ImageMagick or `rsvg-convert`. HEIC is not supported. An image that nothing on the machine can read still gets its name and an `open` button, with no picture.
+SVG needs ImageMagick or `rsvg-convert`. On Windows and Linux, HEIC (`.heic`, `.heif`) needs ImageMagick built with HEIC support; `ffmpeg` is not used for it, because an `ffmpeg` before 7.0 shows only one tile of a phone's photo. An image that nothing on the machine can read still gets its name and an `open` button, with no picture.
 
 ## What the mod does on your machine
 
@@ -208,7 +208,7 @@ SVG needs ImageMagick or `rsvg-convert`. HEIC is not supported. An image that no
 | --- | --- |
 | Windows 11, Windows Terminal 1.25 | Block thumbnails and the Sixel painter, both directly and inside herdr 0.9.5. The Windows helper and the `ffmpeg` path have been run on real files. |
 | macOS 27, iTerm2 3.7.7, Claude Code 2.1.327 | Block thumbnails for files Claude read and files a command wrote (png, jpg, webp, names with escaped spaces), a click on a thumbnail, `/img`, `/img cell 7x17`, and real pixels after a Yes in iTerm2's dialogs. The `sips` commands have been run by hand on png, jpg, gif, bmp, tif, webp, avif and ico files. |
-| macOS 27, Rex Beta 0.1.0 | Block thumbnails, and real pixels with `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1`, the first picture of a session included. The two pictures at the top of this page were taken there. |
+| macOS 27, Rex Beta 0.1.0 | Block thumbnails, and real pixels with `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1`, the first picture of a session included, and the thumbnail of a HEIC file a command wrote. The two pictures at the top of this page were taken there. |
 
 Not yet run on a real machine or terminal: Linux, kitty and Ghostty, pasted images and tool screenshots on macOS, the file name link, and octant blocks on macOS.
 
