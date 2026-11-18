@@ -313,7 +313,9 @@ async function drain($: EngineInterface): Promise<void> {
     }
 
     const machine = await env
-    const png = wantsPixels && (await read($, drawMode)) === 'pixel'
+    // Until the terminal has answered the pixel test, a picture is kept as a
+    // PNG too: the first one of a session is made before the answer comes.
+    const png = wantsPixels && ((await read($, drawMode)) === 'pixel' || probe !== 'done')
     const paste = pastes.shift()
     if (paste) {
       await workPaste($, machine, paste, png)

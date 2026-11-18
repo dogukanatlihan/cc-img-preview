@@ -116,7 +116,9 @@ function world(
     return answer(0)
   })
 
-  const helperRuns = () => runs.filter(argv => argv.includes('-Src') || argv[0] === 'magick').length
+  /** The runs that made an image's blocks; the run that makes its PNG beside them is not one. */
+  const helperRuns = () =>
+    runs.filter(argv => argv.includes('-Src') || (argv[0] === 'magick' && !argv.some(one => one.startsWith('PNG:')))).length
   const opened = () => runs.filter(argv => argv.includes('-Open') || ['open', 'xdg-open'].includes(argv[0] ?? ''))
   /** The box the first thumbnail was asked for, as `<width>x<height>`, whichever helper made it. */
   const boxAsked = () => {
@@ -819,6 +821,35 @@ test('a test picture that never gets drawn is given up after fifteen tries', asy
 
   expect(modes).toEqual([])
   expect(tries()).toBe(15)
+})
+
+/** How many runs of a helper asked for a PNG beside the blocks, whichever helper it was. */
+const pngsAsked = (runs: readonly (readonly string[])[]) =>
+  runs.filter(argv => argv.join(' ').includes('-Png 1') || argv.some(one => one.startsWith('PNG:'))).length
+
+test('a picture made before the terminal has answered the pixel test is kept as a PNG too', async ($, on) => {
+  const { clock, runs } = world(on)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Read', file_path: IMAGE })
+  await clock.advance(1000)
+
+  expect(pngsAsked(runs)).toBe(1)
+})
+
+test('once the terminal has refused the pixel test, a picture is made as blocks alone', async ($, on) => {
+  const { clock, runs, ids } = world(on)
+  on('ui.blit', () => ({ value: { deny: 'this terminal draws the alt text' } }) as never)
+  await $.session.start(start)
+  await $.tool.call({ tool: 'Read', file_path: IMAGE })
+  await clock.advance(1000)
+  const ui = await $.ui.mount(toolUse(ids[0]!))
+  await clock.advance(5000)
+  await ui.unmount()
+
+  await $.tool.call({ tool: 'Read', file_path: 'C:\\p\\b.png' })
+  await clock.advance(1000)
+
+  expect(pngsAsked(runs)).toBe(1)
 })
 
 test('in iTerm2, which asks the person before it shows each picture, the person is told so once', async ($, on) => {

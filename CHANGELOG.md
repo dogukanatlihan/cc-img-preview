@@ -2,6 +2,14 @@
 
 Versions follow [Semantic Versioning](https://semver.org). The version is the one in `.claude-plugin/plugin.json`, and each release has a git tag: `cc-img--v<version>` from 0.2.1 on (the form `claude plugin tag` makes), `v<version>` before that.
 
+## 0.2.2 - 2026-11-18
+
+Real pictures in Rex.
+
+- README: how to get real pixels in Rex, and in any other terminal that draws kitty graphics but that Claude Code does not know by name, with Claude Code's `CLAUDE_CODE_FORCE_TERMINAL_IMAGES` variable.
+- README rewritten for the public: two pictures of the mod at work (`docs/blocks.png`, `docs/pixels.png`), a table of commands, what the mod does on your machine, and what to do if something looks wrong.
+- Fixed: the first picture of a session stayed in block characters in a terminal that draws real pixels, because it was made before the terminal had answered the mod's test picture. Pictures made before the answer are now kept as a PNG too, and turn to real pixels when the answer comes.
+
 ## 0.2.1 - 2026-11-18
 
 Install from a marketplace.
