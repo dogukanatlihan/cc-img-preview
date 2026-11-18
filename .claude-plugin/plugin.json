@@ -1,0 +1,6 @@
+{
+  "name": "cc-img",
+  "version": "0.1.0",
+  "description": "Thumbnails for every image Claude touches, click to open",
+  "types": "./types/index.d.ts"
+}
