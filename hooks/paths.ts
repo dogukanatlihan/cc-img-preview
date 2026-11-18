@@ -28,6 +28,8 @@ export function isImagePath(path: string): boolean {
 }
 
 const TOKEN = /"([^"\n]+)"|'([^'\n]+)'|(\S+)/g
+// In a Unix shell a character with a backslash before it is part of the word: `my\ shot.png`.
+const UNIX_TOKEN = /"([^"\n]+)"|'([^'\n]+)'|((?:\\.|\S)+)/g
 const LEADING = /^[(\[{"'`<]+/
 const TRAILING = /[.,;:)\]}"'`>]+$/
 
@@ -41,17 +43,27 @@ function bare(token: string): string | undefined {
   return isImagePath(path) ? path : undefined
 }
 
-/** The image paths `text` names, in order of appearance, each once. */
-export function scanImagePaths(text: string): string[] {
+/**
+ * The image paths `text` names, in order of appearance, each once.
+ *
+ * `unixShell`: the text is read as a Unix shell reads it, where a backslash
+ * escapes the character after it (`my\ shot\ \(1\).png`) and is taken off an
+ * unquoted word. Not on Windows, where a backslash parts folders.
+ */
+export function scanImagePaths(text: string, unixShell = false): string[] {
+  // A Windows path keeps its backslashes wherever it is read.
+  const unescaped = (word: string) =>
+    unixShell && !DRIVE.test(word) && !word.startsWith('\\\\') ? word.replace(/\\(.)/g, '$1') : word
+
   const found: string[] = []
   const add = (path: string | undefined) => {
     if (path !== undefined && !found.includes(path)) found.push(path)
   }
 
-  for (const match of text.matchAll(TOKEN)) {
+  for (const match of text.matchAll(unixShell ? UNIX_TOKEN : TOKEN)) {
     const quoted = match[1] ?? match[2]
     if (quoted === undefined) {
-      add(bare(match[3]!))
+      add(bare(unescaped(match[3]!)))
       continue
     }
     if (quoted.includes('://')) continue
@@ -87,10 +99,14 @@ function normalize(path: string, isWindows: boolean): string {
   return prefix + out.join(separator)
 }
 
-/** `path` as an absolute path, in the style of `cwd` (or its own drive's). */
-export function resolvePath(path: string, cwd: string): string {
+/**
+ * `path` as an absolute path, in the style of `cwd` (or its own drive's).
+ * `home` is the person's home folder, which a leading `~/` stands for.
+ */
+export function resolvePath(path: string, cwd: string, home?: string): string {
   const isWindowsCwd = DRIVE.test(cwd) || cwd.startsWith('\\\\')
 
+  if (home !== undefined && path.startsWith('~/')) path = home + path.slice(1)
   if (DRIVE.test(path) || path.startsWith('\\\\')) return normalize(path, true)
   if (path.startsWith('/')) {
     const drive = isWindowsCwd ? GIT_BASH_DRIVE.exec(path) : null

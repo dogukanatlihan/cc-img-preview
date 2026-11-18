@@ -88,8 +88,16 @@ let widest = MAX_COLUMNS
 // screen is Windows Terminal's (the painter checks that). Undefined where
 // nothing can: tmux, or no Windows Terminal at all.
 let sixelHost: 'claude' | 'herdr' | undefined
-// Whether the person wants it: `/img pixels off` says no.
-let wantsPixels = true
+// Whether the person wants real pictures, the painter's or the terminal's own:
+// `/img pixels off` says no. Not until the session's start has said which
+// terminal this is: a row drawn before that sends no picture.
+let wantsPixels = false
+// iTerm2 asks the person before it shows each picture, in a dialog that holds
+// the session until it is answered. So there real pictures wait to be asked
+// for: `/img pixels on`.
+let isITerm = false
+// The person's home folder, which `~/` in a command stands for.
+let home: string | undefined
 // The painter, asked for once a session; and whether it started.
 let painter: Promise<boolean> | undefined
 let isPainting = false
@@ -275,12 +283,12 @@ async function workProbe($: EngineInterface, target: { requestId: string; tries:
 /** One piece of queued work a tick, and one send of the pixel test while it runs. */
 async function drain($: EngineInterface): Promise<void> {
   if (isDraining || env === undefined) return
-  const isProbing = probe !== undefined && probe !== 'done'
+  const isProbing = wantsPixels && probe !== undefined && probe !== 'done'
   if (!isProbing && queue.length + pastes.length + claims.length === 0) return
 
   isDraining = true
   try {
-    if (probe !== undefined && probe !== 'done') await workProbe($, probe).catch(() => (probe = 'done'))
+    if (wantsPixels && probe !== undefined && probe !== 'done') await workProbe($, probe).catch(() => (probe = 'done'))
 
     const claim = claims.shift()
     if (claim) {
@@ -290,7 +298,7 @@ async function drain($: EngineInterface): Promise<void> {
     }
 
     const machine = await env
-    const png = (await read($, drawMode)) === 'pixel'
+    const png = wantsPixels && (await read($, drawMode)) === 'pixel'
     const paste = pastes.shift()
     if (paste) {
       await workPaste($, machine, paste, png)
@@ -356,7 +364,7 @@ async function drawUnder(
   const across = roomOf(e)
   if (images.length === 0) return row
 
-  const mode = await read($, drawMode)
+  const mode = wantsPixels ? await read($, drawMode) : 'block'
   const els = $.ui.resolve(e as never) as Elements['terminal']
   const { Box, Image } = els
 
@@ -369,9 +377,9 @@ async function drawUnder(
 
   // The pixel test rides on the first thumbnail a session draws, on its name's line.
   if (mode === 'pixel') probe = 'done'
-  else if (probe === undefined) probe = { requestId: e.requestId, tries: 0 }
+  else if (probe === undefined && wantsPixels) probe = { requestId: e.requestId, tries: 0 }
   const test =
-    probe !== 'done' && probe.requestId === e.requestId ? (
+    wantsPixels && probe !== undefined && probe !== 'done' && probe.requestId === e.requestId ? (
       <Image key={PROBE_KEY} source={{ png: PROBE_PNG }} columns={1} rows={1} alt=" " />
     ) : undefined
 
@@ -394,7 +402,15 @@ export const register: Register = on => {
     blocks = (await $.store.get(BLOCKS_KEY).catch(() => undefined)) === 'octant' ? 'octant' : 'quarter'
     const kept = await $.store.get(COLUMNS_KEY).catch(() => undefined)
     widest = isWidth(kept) ? kept : MAX_COLUMNS
-    wantsPixels = (await $.store.get(PIXELS_KEY).catch(() => undefined)) !== 'off'
+    const pixels = await $.store.get(PIXELS_KEY).catch(() => undefined)
+    // tmux inside iTerm2 names itself in TERM_PROGRAM; LC_TERMINAL still says iTerm2.
+    isITerm =
+      (await $.env.get('TERM_PROGRAM').catch(() => undefined)) === 'iTerm.app' ||
+      (await $.env.get('LC_TERMINAL').catch(() => undefined)) === 'iTerm2'
+    wantsPixels = pixels === 'on' || (pixels !== 'off' && !isITerm)
+    home = (await $.env.get('HOME').catch(() => undefined)) || undefined
+    // Rows drawn before this was known were drawn in blocks.
+    if (wantsPixels) $.ui.invalidate('ui.render')
     // herdr and tmux sit between Claude Code and the terminal, and pass no Sixel on.
     const windowsTerminal = await $.env.get('WT_SESSION').catch(() => undefined)
     const herdr = await $.env.get('HERDR_ENV').catch(() => undefined)
@@ -404,7 +420,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'img',
       description:
-        'Open the latest image (/img 2: the one before; /img fine or coarse: sharper or plainer thumbnails; /img size 40: their width)',
+        'Open the latest image (/img 2: the one before; /img fine or coarse: sharper or plainer thumbnails; /img size 40: their width; /img pixels on or off: real pictures)',
     })
     $.clock.every(DRAIN_EVERY_MS, () => void drain($))
 
@@ -419,7 +435,8 @@ export const register: Register = on => {
       // A subagent's calls draw no row here.
       if (ran.deny === undefined && ran.isError !== true && e.agentId === undefined) {
         const { tool, tool_use_id: rowId, ...input } = e
-        const candidates = collect({ tool, input, cwd, startedAt }, { result: ran.result, text: ran.text })
+        const call = { tool, input, cwd, startedAt, ...(home === undefined ? {} : { home }) }
+        const candidates = collect(call, { result: ran.result, text: ran.text })
         if (candidates.length > 0) queue.push({ rowId, tool, candidates })
       }
     } catch {
@@ -469,11 +486,15 @@ export const register: Register = on => {
     }
     if (asked === 'pixels on' || asked === 'pixels off') {
       wantsPixels = asked === 'pixels on'
+      // A test picture not yet answered is sent again from the next thumbnail drawn.
+      if (probe !== 'done') probe = undefined
       await $.store.set(PIXELS_KEY, wantsPixels ? 'on' : 'off').catch(() => undefined)
       $.ui.invalidate('ui.render')
       $.ui.toast(
         wantsPixels
-          ? 'In Windows Terminal, images are drawn as real pictures again.'
+          ? isITerm
+            ? 'Real pictures are on. iTerm2 asks before each one: tick "Remember my choice", then Yes.'
+            : 'Images are drawn as real pictures again, where the terminal can.'
           : 'Images are drawn in block characters, in every terminal.',
       )
 

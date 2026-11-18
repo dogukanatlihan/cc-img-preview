@@ -65,6 +65,8 @@ export const TIMEOUT_MS = 5000
 
 const WINDOWS_READS = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tif', 'tiff', 'ico']
 const MACOS_READS = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tif', 'tiff']
+/** What `sips` reads only on a newer macOS (webp from 11, avif from 13): tried where nothing else can. */
+const MACOS_READS_LATER = ['webp', 'avif', 'ico']
 
 /**
  * The reader ImageMagick is told to use for each extension. Left to itself it
@@ -96,7 +98,10 @@ export function helperFor(env: Env, src: string): Helper | undefined {
   if (env.platform === 'win32' && WINDOWS_READS.includes(ext)) return 'powershell'
   if (env.platform === 'darwin' && MACOS_READS.includes(ext)) return 'sips'
 
-  return env.tools.magick ? 'magick' : env.tools.ffmpeg ? 'ffmpeg' : undefined
+  if (env.tools.magick) return 'magick'
+  if (env.tools.ffmpeg) return 'ffmpeg'
+
+  return env.platform === 'darwin' && MACOS_READS_LATER.includes(ext) ? 'sips' : undefined
 }
 
 /** What makes this session's temp folder. */
@@ -236,7 +241,8 @@ export async function saveBase64($: RunProcess, env: Env, base64: string, destPa
     const argv =
       env.platform === 'win32'
         ? windowsHelper(env.root, '-FromStdin', destPath)
-        : ['sh', '-c', 'mkdir -p "$(dirname "$1")" && base64 -d > "$1"', 'sh', destPath]
+        : // `-D` is the flag every macOS takes; an older one has no `-d`.
+          ['sh', '-c', `mkdir -p "$(dirname "$1")" && base64 ${env.platform === 'darwin' ? '-D' : '-d'} > "$1"`, 'sh', destPath]
 
     return (await run($, argv, base64)) !== undefined
   } catch {

@@ -331,3 +331,20 @@ test('a system that answers nothing is taken for Linux with /tmp and no tools', 
     tools: { ffmpeg: false, magick: false, rsvg: false },
   })
 })
+
+test('macOS with no tool installed asks sips for the formats only a newer macOS reads', async () => {
+  expect(helperFor(mac, 'a.webp')).toBe('sips')
+  expect(helperFor(mac, 'a.avif')).toBe('sips')
+  expect(helperFor(mac, 'a.ico')).toBe('sips')
+  expect(helperFor({ ...mac, tools: { ...none, ffmpeg: true } }, 'a.webp')).toBe('ffmpeg')
+  expect(helperFor(linux, 'a.webp')).toBeUndefined()
+})
+
+test('on macOS bytes are decoded with the flag every macOS takes', async () => {
+  const { run, runs } = fake(() => ok())
+
+  expect(await saveBase64(run, mac, 'aGk=', '/t/shot.png')).toBe(true)
+  expect(runs[0]?.argv[2]).toContain('base64 -D')
+  expect(await saveBase64(run, linux, 'aGk=', '/t/shot.png')).toBe(true)
+  expect(runs[1]?.argv[2]).toContain('base64 -d')
+})

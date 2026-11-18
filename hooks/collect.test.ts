@@ -104,3 +104,12 @@ test('an input or a result of no known shape is nothing, and nothing is thrown',
   loop.self = loop
   expect(collect({ ...at, tool: 'Bash', input: {} }, { result: loop })).toEqual([])
 })
+
+test('a command that names a file under ~ or with escaped spaces finds it', async () => {
+  const call = { tool: 'Bash', input: { command: 'cp ~/Desktop/my\\ shot.png out.png' }, cwd: '/proj', startedAt: 5000, home: '/Users/me' }
+
+  expect(collect(call, {})).toEqual([
+    { kind: 'file', path: '/Users/me/Desktop/my shot.png', newerThan: 3000 },
+    { kind: 'file', path: '/proj/out.png', newerThan: 3000 },
+  ])
+})

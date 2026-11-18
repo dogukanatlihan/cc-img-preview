@@ -57,3 +57,20 @@ test('a file address escapes what a link cannot hold', async () => {
   expect(fileUrl('C:\\a b\\x.png')).toBe('file:///C:/a%20b/x.png')
   expect(fileUrl('/tmp/a#1.png')).toBe('file:///tmp/a%231.png')
 })
+
+test('a space a Unix shell escapes is part of the path, and the escapes are taken off', async () => {
+  expect(scanImagePaths('open my\\ shot\\ \\(1\\).png now', true)).toEqual(['my shot (1).png'])
+  // A quoted path is taken as it is written, and so is a Windows path.
+  expect(scanImagePaths('open "a\\b.png" C:\\x\\c.png', true)).toEqual(['a\\b.png', 'C:\\x\\c.png'])
+  // A network path is still seen as one, with or without escapes.
+  expect(scanImagePaths('see \\/\\/host/x.png', true)).toEqual(['//host/x.png'])
+  // On Windows a backslash parts folders, and a space ends a word.
+  expect(scanImagePaths('robocopy C:\\src\\ C:\\dst\\ shot.png')).toEqual(['shot.png'])
+  expect(resolvePath('sub\\a.png', 'C:\\proj')).toBe('C:\\proj\\sub\\a.png')
+})
+
+test('a path that starts at ~ starts at the home folder, where that is known', async () => {
+  expect(resolvePath('~/Desktop/a.png', '/proj', '/Users/me')).toBe('/Users/me/Desktop/a.png')
+  expect(resolvePath('~/a.png', 'C:\\proj', 'C:\\Users\\me')).toBe('C:\\Users\\me\\a.png')
+  expect(resolvePath('~/a.png', '/proj')).toBe('/proj/~/a.png')
+})

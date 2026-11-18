@@ -23,7 +23,8 @@ const SLACK_MS = 2000
 /** Tools whose own target is the only file they touch. */
 const FILE_TOOLS = ['Read', 'Write', 'Edit']
 
-type Call = { tool: string; input: unknown; cwd: string; startedAt: number }
+/** `home`: the person's home folder, which `~/` in a path stands for. */
+type Call = { tool: string; input: unknown; cwd: string; startedAt: number; home?: string }
 type Ran = { result?: unknown; text?: string }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
@@ -75,7 +76,7 @@ export function collect(call: Call, ran: Ran): Candidate[] {
     const target = isRecord(call.input) ? call.input.file_path : undefined
 
     return typeof target === 'string' && isImagePath(target)
-      ? [{ kind: 'file', path: resolvePath(target, call.cwd) }]
+      ? [{ kind: 'file', path: resolvePath(target, call.cwd, call.home) }]
       : []
   }
 
@@ -84,11 +85,12 @@ export function collect(call: Call, ran: Ran): Candidate[] {
   const newerThan = call.startedAt - SLACK_MS
 
   for (const text of [...strings(call.input), ran.text ?? '']) {
-    for (const name of scanImagePaths(text)) {
+    // A Unix folder starts with `/`: there a command is read as a Unix shell reads it.
+    for (const name of scanImagePaths(text, call.cwd.startsWith('/'))) {
       // Text is not to be trusted with where the machine looks: a network
       // path found in it would send this machine's sign-in to that host.
       if (NETWORK_PATH.test(name)) continue
-      const path = resolvePath(name, call.cwd)
+      const path = resolvePath(name, call.cwd, call.home)
       if (paths.has(path)) continue
       paths.add(path)
       found.push({ kind: 'file', path, newerThan })

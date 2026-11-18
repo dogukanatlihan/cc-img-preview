@@ -488,6 +488,7 @@ function holding(on: On, mode: 'pixel' | undefined, image: object) {
 test('where the terminal draws pixels, an image is a real picture with an open button', async ($, on) => {
   world(on)
   holding(on, 'pixel', { ...PASTED, png: TINY_PNG })
+  await $.session.start(start)
 
   const ui = await $.ui.mount(toolUse('t1'))
   const picture = await ui.find({ type: 'Image', key: 'img0' })
@@ -527,6 +528,7 @@ test('a picture wider than the terminal is cut to the room there is', async ($, 
 test('a real picture wider than the terminal is drawn smaller', async ($, on) => {
   world(on)
   holding(on, 'pixel', { ...WIDE, rows: 4, png: TINY_PNG })
+  await $.session.start(start)
 
   const ui = await $.ui.mount({ ...toolUse('t1'), viewport: NARROW })
 
@@ -817,4 +819,68 @@ test('a test picture that never gets drawn is given up after fifteen tries', asy
 
   expect(modes).toEqual([])
   expect(tries()).toBe(15)
+})
+
+test('in iTerm2, which asks the person before it shows each picture, no picture is sent until /img pixels on', async ($, on) => {
+  const { clock, store, toasts } = world(on, { env: { TERM_PROGRAM: 'iTerm.app' } })
+  holding(on, undefined, PASTED)
+  let sends = 0
+  on('ui.blit', () => {
+    sends++
+
+    return { value: {} } as never
+  })
+  await $.session.start(start)
+
+  const ui = await $.ui.mount(toolUse('t1'))
+  const hadProbe = (await ui.find({ type: 'Image', key: 'probe' })) !== undefined
+  await clock.advance(2000)
+  await ui.unmount()
+
+  await $.command.run({ command: 'img', args: 'pixels on' } as never)
+  const again = await $.ui.mount(toolUse('t1'))
+  const hasProbeWhenAsked = (await again.find({ type: 'Image', key: 'probe' })) !== undefined
+  await again.unmount()
+
+  expect(hadProbe).toBe(false)
+  expect(sends).toBe(0)
+  expect(hasProbeWhenAsked).toBe(true)
+  expect(store).toEqual({ pixels: 'on' })
+  expect(toasts[0]).toContain('Remember my choice')
+})
+
+test('in iTerm2 a session starts with real pictures where an earlier one asked for them', async ($, on) => {
+  world(on, { env: { LC_TERMINAL: 'iTerm2' }, kept: { pixels: 'on' } })
+  holding(on, undefined, PASTED)
+  await $.session.start(start)
+
+  const ui = await $.ui.mount(toolUse('t1'))
+
+  expect(await ui.find({ type: 'Image', key: 'probe' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('/img pixels off draws blocks where the terminal itself draws pixels too', async ($, on) => {
+  world(on)
+  holding(on, 'pixel', { ...PASTED, png: TINY_PNG })
+  await $.session.start(start)
+  await $.command.run({ command: 'img', args: 'pixels off' } as never)
+
+  const ui = await $.ui.mount(toolUse('t1'))
+
+  expect(await ui.find({ type: 'Image', key: 'img0' })).toBeUndefined()
+  expect(await ui.find({ type: 'Button', key: 'img0-r0' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a row drawn before the session has said which terminal this is sends no picture', async ($, on) => {
+  world(on, { env: { TERM_PROGRAM: 'iTerm.app' } })
+  holding(on, 'pixel', { ...PASTED, png: TINY_PNG })
+
+  const ui = await $.ui.mount(toolUse('t1'))
+
+  expect(await ui.find({ type: 'Image', key: 'probe' })).toBeUndefined()
+  expect(await ui.find({ type: 'Image', key: 'img0' })).toBeUndefined()
+  expect(await ui.find({ type: 'Button', key: 'img0-r0' })).toBeDefined()
+  await ui.unmount()
 })

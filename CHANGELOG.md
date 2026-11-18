@@ -2,6 +2,17 @@
 
 Versions follow [Semantic Versioning](https://semver.org). The version is the one in `.claude-plugin/plugin.json`, and each release has a git tag `v<version>`.
 
+## 0.2.0 - 2026-11-18
+
+macOS and iTerm2.
+
+- iTerm2 asks the person before it shows each picture, and Claude Code stands still until the dialog is answered. So in iTerm2 the mod now starts with block characters and sends no picture. `/img pixels on` turns real pixels on there.
+- `/img pixels off` now gives block characters in every terminal. Before, it changed nothing in kitty, Ghostty and iTerm2.
+- Paths that start with `~/` and paths with escaped spaces (`my\ shot.png`) in a command are found on macOS and Linux.
+- On a macOS with no ImageMagick and no ffmpeg, webp, avif and ico files are read by `sips`.
+- On macOS, pictures with no file are decoded with `base64 -D`, which every macOS version takes.
+- Run on macOS 27 in iTerm2 3.7.7: see Status in the README.
+
 ## 0.1.0 - 2026-11-18
 
 First public version.
