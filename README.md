@@ -19,27 +19,23 @@ At most 4 images are shown per tool call. Tool calls made by subagents are not c
 | --- | --- |
 | Any terminal with 24-bit colour (Windows Terminal, VS Code, most others) | Coloured block characters. A thumbnail is at most 80 columns by 40 rows, and smaller where the terminal is. A cell has only two colours, so fine detail blurs. |
 | kitty, Ghostty | Real pixels. |
-| iTerm2 3.5+ | Block characters to start with. Real pixels after `/img pixels on` (see below). |
+| iTerm2 3.5+ | Real pixels, once you allow them in iTerm2's own dialog (see below). |
 | Windows Terminal 1.22+, directly or inside herdr (not tmux) | Real pixels, by a painter of the mod's own (experimental; see below). |
 
 The mod finds out which kind of terminal it is in by itself, once per session.
 
 ### Real pictures in iTerm2
 
-iTerm2 can draw real pixels, but it asks the person first. For each picture a program sends, iTerm2 opens the dialog "Allow Terminal-Initiated Display?", and Claude Code stands still until the dialog is answered. One image can bring three such dialogs. So in iTerm2 the mod starts with block characters, which need no permission.
+iTerm2 draws real pixels, but it asks the person first. For each picture a program sends, iTerm2 opens the dialog "Allow Terminal-Initiated Display?", and Claude Code stands still until the dialog is answered. The first image brings about three such dialogs, the first of them for the mod's one-pixel test picture ("Unnamed file", 70 bytes). The mod says so once, the first time it starts in iTerm2.
 
-To get real pixels:
+You have two ways to stop the dialogs:
 
-1. Type `/img pixels on`. The choice is kept between sessions.
-2. At the first dialog, tick "Remember my choice" and press Yes.
+- Tick "Remember my choice" in the dialog and press Yes. Know what that tick does before you set it: iTerm2 keeps one answer for pictures and for file downloads that a program in the terminal starts, so after the tick it asks for neither. To take it back: iTerm2 Settings, Advanced, "Suppress confirmation of terminal-initiated downloads".
+- Type `/img pixels off`. The mod then draws block characters and sends no picture. The choice is kept between sessions.
 
-Know what that tick does before you set it. iTerm2 keeps one answer for pictures and for file downloads that a program in the terminal starts. After the tick, iTerm2 asks for neither. To take it back: iTerm2 Settings, Advanced, "Suppress confirmation of terminal-initiated downloads".
+If you answer No and tick "Remember my choice", the picture area stays empty, and the mod cannot see that. Go to blocks with `/img pixels off`.
 
-The mod knows iTerm2 by the `TERM_PROGRAM` and `LC_TERMINAL` variables. Where neither reaches Claude Code (over ssh with no `LC_*` variables sent on, or in a tmux server started from another terminal), it cannot tell, and sends one test picture: type `/img pixels off` there.
-
-If you answer No and tick "Remember my choice", the picture area stays empty, and the mod cannot see that. Go back to blocks with `/img pixels off`.
-
-A real picture keeps its shape. The mod gives it as many rows as a cell twice as tall as wide needs, so with a taller line spacing some empty rows stay under the picture.
+The mod knows iTerm2 by the `TERM_PROGRAM` and `LC_TERMINAL` variables. It uses them only to say the above once. Where neither reaches Claude Code (over ssh with no `LC_*` variables sent on, or in a tmux server started from another terminal), the dialogs come with no word from the mod.
 
 ### Real pictures in Windows Terminal (experimental)
 
@@ -66,7 +62,13 @@ Block characters come in two kinds, and the mod cannot tell which your font has,
 
 `/img size 40` sets how wide a thumbnail may be, in columns, from 8 to 160 (80 to start with); it is at most half as many rows tall. A "pixel" can be no smaller than a block: half a cell wide, and a half or a quarter of a cell tall. So a smaller thumbnail holds fewer pixels, and the only way to get the same picture smaller is a smaller terminal font.
 
-Both choices are kept between sessions and apply to thumbnails made after them. If `/img fine` shows boxes or question marks where the picture should be, the font lacks octants: go back with `/img coarse`.
+`/img cell 7x17` tells the mod the size of one terminal cell, width by height. The mod cannot ask the terminal, and takes a cell for twice as tall as wide (`1x2`). With a taller line spacing a thumbnail then looks stretched from top to bottom, and a real picture has empty rows under it. Only the shape counts, so any unit does. Most terminals, iTerm2 among them, print the size for this line in bash or zsh:
+
+```
+printf '\033[16t'; IFS=';' read -rs -d t _ h w; echo "${w}x${h}"
+```
+
+These choices are kept between sessions and apply to thumbnails made after them. If `/img fine` shows boxes or question marks where the picture should be, the font lacks octants: go back with `/img coarse`.
 
 Under each picture is the file name and the image's size, for example `shot.png  1280x720`.
 
@@ -98,7 +100,6 @@ SVG needs ImageMagick or `rsvg-convert`. An image that nothing on the machine ca
 - A pasted image is matched to your message by the message's text. Two messages with exactly the same text, sent before the first one's thumbnail has appeared, can swap pictures.
 - A relative path in a command is resolved against the folder the session started in. On macOS and Linux a path that starts with `~/` is resolved against your home folder, and a space written as `\ ` is read as part of the path.
 - A path with spaces is found only where it is quoted or its spaces are escaped. A bare `my shot.png` in a command's output is read as two words.
-- Block thumbnails are made for a cell twice as tall as wide. With a taller line spacing in the terminal profile, a thumbnail looks a little stretched from top to bottom.
 - On macOS the clear parts of a picture are drawn black; with ImageMagick they are drawn grey.
 - A thumbnail keeps the width it was made at. Narrow the terminal afterwards and it is cut off at the right edge; widen it and it stays small.
 - The box is two constants, `MAX_COLUMNS` and `MAX_ROWS`, in `hooks/pixels.ts`.
@@ -107,7 +108,7 @@ SVG needs ImageMagick or `rsvg-convert`. An image that nothing on the machine ca
 
 Built and run on Windows 11 in Windows Terminal 1.25: block thumbnails and the Sixel painter have been seen working there, both directly and inside herdr 0.9.5, and the Windows helper and the `ffmpeg` path have been run on real files.
 
-Run on macOS 27 in iTerm2 3.7.7 with Claude Code 2.1.327. Seen working on screen there: block thumbnails for files Claude read and files a command wrote (png, jpg, webp, names with escaped spaces), a click on a thumbnail, `/img`, and real pixels after `/img pixels on` and a Yes in iTerm2's dialog. The `sips` commands have been run by hand on png, jpg, gif, bmp, tif, webp, avif and ico files.
+Run on macOS 27 in iTerm2 3.7.7 with Claude Code 2.1.327. Seen working on screen there: block thumbnails for files Claude read and files a command wrote (png, jpg, webp, names with escaped spaces), a click on a thumbnail, `/img`, `/img cell 7x17`, and real pixels after a Yes in iTerm2's dialogs. The `sips` commands have been run by hand on png, jpg, gif, bmp, tif, webp, avif and ico files.
 
 Not yet run on a real machine or terminal: Linux, kitty and Ghostty, pasted images and tool screenshots on macOS, the file name link, and octant blocks in iTerm2.
 

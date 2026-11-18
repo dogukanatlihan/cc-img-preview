@@ -6,8 +6,10 @@ Versions follow [Semantic Versioning](https://semver.org). The version is the on
 
 macOS and iTerm2.
 
-- iTerm2 asks the person before it shows each picture, and Claude Code stands still until the dialog is answered. So in iTerm2 the mod now starts with block characters and sends no picture. `/img pixels on` turns real pixels on there.
-- `/img pixels off` now gives block characters in every terminal. Before, it changed nothing in kitty, Ghostty and iTerm2.
+- iTerm2 asks the person before it shows each picture, and Claude Code stands still until the dialog is answered. The mod now says so once, the first time it starts in iTerm2, with the two ways to stop it.
+- `/img pixels off` now gives block characters in every terminal, and sends no picture. Before, it changed nothing in kitty, Ghostty and iTerm2.
+- New: `/img cell 7x17` gives the size of a terminal cell. Thumbnails keep their shape where a cell is not twice as tall as wide, and a real picture has no empty rows under it.
+- No picture is sent before the session's start has run.
 - Paths that start with `~/` and paths with escaped spaces (`my\ shot.png`) in a command are found on macOS and Linux.
 - On a macOS with no ImageMagick and no ffmpeg, webp, avif and ico files are read by `sips`.
 - On macOS, pictures with no file are decoded with `base64 -D`, which every macOS version takes.

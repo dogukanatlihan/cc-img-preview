@@ -87,6 +87,39 @@ export function parseBmp(bytes: Uint8Array): { width: number; height: number; rg
   return { width, height, rgb }
 }
 
+/**
+ * The picture at the shape that shows true in a cell `cellRatio` times as
+ * tall as wide. The helpers make it for a cell twice as tall as wide: for a
+ * taller cell it is made shorter, for a squatter one narrower, never larger.
+ * Each new pixel is the average of the old ones it covers.
+ */
+export function forCell(
+  image: { width: number; height: number; rgb: Uint8Array },
+  cellRatio: number,
+): { width: number; height: number; rgb: Uint8Array } {
+  const squash = 2 / cellRatio
+  const width = squash > 1 ? Math.max(1, Math.round(image.width / squash)) : image.width
+  const height = squash < 1 ? Math.max(1, Math.round(image.height * squash)) : image.height
+  if (width === image.width && height === image.height) return image
+
+  const rgb = new Uint8Array(width * height * 3)
+  for (let y = 0; y < height; y++) {
+    const top = Math.floor((y * image.height) / height)
+    const bottom = Math.max(top + 1, Math.floor(((y + 1) * image.height) / height))
+    for (let x = 0; x < width; x++) {
+      const left = Math.floor((x * image.width) / width)
+      const right = Math.max(left + 1, Math.floor(((x + 1) * image.width) / width))
+      for (let c = 0; c < 3; c++) {
+        let sum = 0
+        for (let sy = top; sy < bottom; sy++) for (let sx = left; sx < right; sx++) sum += image.rgb[(sy * image.width + sx) * 3 + c]!
+        rgb[(y * width + x) * 3 + c] = Math.round(sum / ((bottom - top) * (right - left)))
+      }
+    }
+  }
+
+  return { width, height, rgb }
+}
+
 /** One stretch of cells that share a foreground and a background colour. */
 export type Run = { text: string; fg: string; bg: string }
 

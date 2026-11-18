@@ -4,7 +4,7 @@ import type { Thumb } from '../types'
 
 import type { Candidate } from './collect'
 import { baseName, isImagePath } from './paths'
-import { boxFor, cellsOf, MAX_COLUMNS, MAX_ROWS, parseBmp } from './pixels'
+import { boxFor, cellsOf, forCell, MAX_COLUMNS, MAX_ROWS, parseBmp } from './pixels'
 import type { Blocks } from './pixels'
 import { makeThumb, saveBase64 } from './thumb'
 import type { Env, RunProcess } from './thumb'
@@ -32,6 +32,8 @@ export type ThumbOptions = {
   blocks?: Blocks
   /** Asks for a full-size picture for the Sixel painter too, kept under this name. */
   six?: string
+  /** How many times as tall as wide a terminal cell is; 2 when left out. */
+  cellRatio?: number
 }
 
 /** The Sixel painter takes every cell for this many pixels, as Windows Terminal does. */
@@ -99,8 +101,9 @@ async function build(deps: Deps, env: Env, candidate: Candidate, options: ThumbO
   if (!files) return captionOnly()
 
   const stored = await deps.readBase64(files.bmpPath)
-  const image = stored === undefined ? undefined : parseBmp(Uint8Array.fromBase64(stored))
-  if (!image) return captionOnly(files.width, files.height)
+  const read = stored === undefined ? undefined : parseBmp(Uint8Array.fromBase64(stored))
+  if (!read) return captionOnly(files.width, files.height)
+  const image = forCell(read, options.cellRatio ?? 2)
 
   const { down } = boxFor(blocks)
   const made = cellsOf(image.rgb, image.width, image.height, down)

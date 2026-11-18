@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { boxFor, cellsOf, fitBox, octant, parseBmp, rowsOf, toRows } from './pixels'
+import { boxFor, cellsOf, fitBox, forCell, octant, parseBmp, rowsOf, toRows } from './pixels'
 
 /** An uncompressed BMP. `rows` are in file order, each the row's pixel bytes. */
 function bmp(width: number, height: number, bitsPerPixel: number, rows: number[][], compression = 0): Uint8Array {
@@ -178,4 +178,16 @@ test('a height that is not whole cells repeats its last pixel row', async () => 
 
   expect([made.columns, made.rows]).toEqual([1, 2])
   expect(rowsOf(made.cells, 1, 2, 4)).toHaveLength(2)
+})
+
+test('for a cell taller than two to one a picture is made shorter, for a squatter one narrower, never larger', async () => {
+  // 2 across, 4 down: the rows are 0, 100, 200, 100 in every channel.
+  const rgb = new Uint8Array([0, 0, 0, 0, 0, 0, 100, 100, 100, 100, 100, 100, 200, 200, 200, 200, 200, 200, 100, 100, 100, 100, 100, 100])
+  const image = { width: 2, height: 4, rgb }
+
+  expect(forCell(image, 2)).toBe(image)
+  // A cell four times as tall as wide: half the rows, each the average of two.
+  expect(forCell(image, 4)).toEqual({ width: 2, height: 2, rgb: new Uint8Array([50, 50, 50, 50, 50, 50, 150, 150, 150, 150, 150, 150]) })
+  // A square cell: half the columns, the rows as they were.
+  expect(forCell(image, 1)).toEqual({ width: 1, height: 4, rgb: new Uint8Array([0, 0, 0, 100, 100, 100, 200, 200, 200, 100, 100, 100]) })
 })

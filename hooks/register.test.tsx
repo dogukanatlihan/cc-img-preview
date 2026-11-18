@@ -821,8 +821,24 @@ test('a test picture that never gets drawn is given up after fifteen tries', asy
   expect(tries()).toBe(15)
 })
 
-test('in iTerm2, which asks the person before it shows each picture, no picture is sent until /img pixels on', async ($, on) => {
-  const { clock, store, toasts } = world(on, { env: { TERM_PROGRAM: 'iTerm.app' } })
+test('in iTerm2, which asks the person before it shows each picture, the person is told so once', async ($, on) => {
+  const { store, toasts } = world(on, { env: { TERM_PROGRAM: 'iTerm.app' } })
+  holding(on, undefined, PASTED)
+  await $.session.start(start)
+  await $.session.start(start)
+
+  const ui = await $.ui.mount(toolUse('t1'))
+
+  expect(toasts).toHaveLength(1)
+  expect(toasts[0]).toContain('Remember my choice')
+  expect(toasts[0]).toContain('/img pixels off')
+  expect(store).toEqual({ itermTold: true })
+  expect(await ui.find({ type: 'Image', key: 'probe' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('in iTerm2 with pixels off no picture is sent and nothing is said', async ($, on) => {
+  const { clock, toasts } = world(on, { env: { LC_TERMINAL: 'iTerm2' }, kept: { pixels: 'off' } })
   holding(on, undefined, PASTED)
   let sends = 0
   on('ui.blit', () => {
@@ -837,27 +853,22 @@ test('in iTerm2, which asks the person before it shows each picture, no picture 
   await clock.advance(2000)
   await ui.unmount()
 
-  await $.command.run({ command: 'img', args: 'pixels on' } as never)
-  const again = await $.ui.mount(toolUse('t1'))
-  const hasProbeWhenAsked = (await again.find({ type: 'Image', key: 'probe' })) !== undefined
-  await again.unmount()
-
   expect(hadProbe).toBe(false)
   expect(sends).toBe(0)
-  expect(hasProbeWhenAsked).toBe(true)
-  expect(store).toEqual({ pixels: 'on' })
-  expect(toasts[0]).toContain('Remember my choice')
+  expect(toasts).toEqual([])
 })
 
-test('in iTerm2 a session starts with real pictures where an earlier one asked for them', async ($, on) => {
-  world(on, { env: { LC_TERMINAL: 'iTerm2' }, kept: { pixels: 'on' } })
-  holding(on, undefined, PASTED)
+test('/img cell 7x17 makes the thumbnails that follow for that cell, and is kept; a shape no cell has is refused', async ($, on) => {
+  const { store, toasts } = world(on)
   await $.session.start(start)
 
-  const ui = await $.ui.mount(toolUse('t1'))
+  await $.command.run({ command: 'img', args: 'cell 7x17' } as never)
+  await $.command.run({ command: 'img', args: 'cell 17x7' } as never)
+  await $.command.run({ command: 'img', args: 'cell tall' } as never)
 
-  expect(await ui.find({ type: 'Image', key: 'probe' })).toBeDefined()
-  await ui.unmount()
+  expect(store).toEqual({ cell: '7x17' })
+  expect(toasts).toHaveLength(3)
+  expect(toasts[1]).toBe(toasts[2])
 })
 
 test('/img pixels off draws blocks where the terminal itself draws pixels too', async ($, on) => {

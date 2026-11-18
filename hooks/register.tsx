@@ -40,9 +40,12 @@ const ROWS_KEPT = 6
 const BLOCKS_KEY = 'blocks'
 const COLUMNS_KEY = 'columns'
 const PIXELS_KEY = 'pixels'
+const CELL_KEY = 'cell'
+const ITERM_TOLD_KEY = 'itermTold'
 /** The widest a person may ask thumbnails to be, in cells. */
 const WIDEST = 160
 const SIZE_HELP = `Give a width in columns, from ${MIN_COLUMNS} to ${WIDEST}: /img size 40`
+const CELL_HELP = 'Give the size of one terminal cell, width x height: /img cell 7x17. To start with it is 1x2.'
 
 // Change a tag when the value's fields change: it declines what an earlier
 // version of the mod stored, which outlives a reload.
@@ -93,9 +96,12 @@ let sixelHost: 'claude' | 'herdr' | undefined
 // terminal this is: a row drawn before that sends no picture.
 let wantsPixels = false
 // iTerm2 asks the person before it shows each picture, in a dialog that holds
-// the session until it is answered. So there real pictures wait to be asked
-// for: `/img pixels on`.
+// the session until it is answered. The person is told so once, and how to
+// stop it.
 let isITerm = false
+// How many times as tall as wide a cell of this terminal is. A mod cannot ask
+// the terminal, so the person says: `/img cell 7x17`.
+let cellRatio = 2
 // The person's home folder, which `~/` in a command stands for.
 let home: string | undefined
 // The painter, asked for once a session; and whether it started.
@@ -133,6 +139,14 @@ function roomOf(e: { viewport?: { columns: number; rows: number } }): number {
   return room
 }
 
+/** The cell shape `7x17` names, as height over width; undefined for what names none a terminal has. */
+function ratioOf(value: unknown): number | undefined {
+  const sizes = typeof value === 'string' ? /^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/.exec(value) : null
+  const ratio = sizes ? Number(sizes[2]) / Number(sizes[1]) : NaN
+
+  return ratio >= 1 && ratio <= 4 ? ratio : undefined
+}
+
 /** Whether this is a width a person may ask for. */
 const isWidth = (value: unknown): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= MIN_COLUMNS && value <= WIDEST
@@ -142,6 +156,7 @@ const sizeToMake = () => ({
   columns: Math.max(MIN_COLUMNS, Math.min(widest, room)),
   rows: Math.max(Math.min(MIN_ROWS, Math.round(widest / 2)), Math.min(Math.round(widest / 2), roomDown)),
   blocks,
+  cellRatio,
 })
 
 /** Starts the Sixel painter for this session, on `host`'s screen; whether it started. */
@@ -407,7 +422,12 @@ export const register: Register = on => {
     isITerm =
       (await $.env.get('TERM_PROGRAM').catch(() => undefined)) === 'iTerm.app' ||
       (await $.env.get('LC_TERMINAL').catch(() => undefined)) === 'iTerm2'
-    wantsPixels = pixels === 'on' || (pixels !== 'off' && !isITerm)
+    wantsPixels = pixels !== 'off'
+    cellRatio = ratioOf(await $.store.get(CELL_KEY).catch(() => undefined)) ?? 2
+    if (isITerm && wantsPixels && (await $.store.get(ITERM_TOLD_KEY).catch(() => undefined)) !== true) {
+      await $.store.set(ITERM_TOLD_KEY, true).catch(() => undefined)
+      $.ui.toast('iTerm2 asks before it shows each picture: tick "Remember my choice", then Yes. Or: /img pixels off')
+    }
     home = (await $.env.get('HOME').catch(() => undefined)) || undefined
     // Rows drawn before this was known were drawn in blocks.
     if (wantsPixels) $.ui.invalidate('ui.render')
@@ -420,7 +440,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'img',
       description:
-        'Open the latest image (/img 2: the one before; /img fine or coarse: sharper or plainer thumbnails; /img size 40: their width; /img pixels on or off: real pictures)',
+        'Open the latest image (/img 2: the one before; /img fine or coarse: sharper or plainer thumbnails; /img size 40: their width; /img pixels on or off: real pictures; /img cell 7x17: the size of a terminal cell)',
     })
     $.clock.every(DRAIN_EVERY_MS, () => void drain($))
 
@@ -507,6 +527,18 @@ export const register: Register = on => {
         widest = width
         await $.store.set(COLUMNS_KEY, width).catch(() => undefined)
         $.ui.toast(`Thumbnails from now on are at most ${width} columns wide and ${Math.round(width / 2)} rows tall.`)
+      }
+
+      return {}
+    }
+    if (asked.split(/\s+/)[0] === 'cell') {
+      const shape = asked.split(/\s+/)[1]
+      const ratio = ratioOf(shape)
+      if (ratio === undefined) $.ui.toast(CELL_HELP)
+      else {
+        cellRatio = ratio
+        await $.store.set(CELL_KEY, shape).catch(() => undefined)
+        $.ui.toast(`Thumbnails from now on are made for a cell of ${shape}.`)
       }
 
       return {}
