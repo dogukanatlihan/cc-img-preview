@@ -32,11 +32,23 @@ export function isImagePath(path: string): boolean {
 const TOKEN = /"([^"\n]+)"|'([^'\n]+)'|(\S+)/g
 // In a Unix shell a character with a backslash before it is part of the word: `my\ shot.png`.
 const UNIX_TOKEN = /"([^"\n]+)"|'([^'\n]+)'|((?:\\.|\S)+)/g
-const LEADING = /^[(\[{"'`<]+/
-const TRAILING = /[.,;:)\]}"'`>]+$/
+const LEADING = /^[([{"'`<]+/
+const TRAILING = '.,;:)]}"\'`>'
+
+/**
+ * `text` without the run of `chars` at its end. A loop, not `/[...]+$/`: on a
+ * long run that is not at the end, that expression starts again from each
+ * character of the run, and 80,000 dots in a command's output took it seconds.
+ */
+export function trimEnd(text: string, chars: string): string {
+  let end = text.length
+  while (end > 0 && chars.includes(text[end - 1]!)) end--
+
+  return text.slice(0, end)
+}
 
 function bare(token: string): string | undefined {
-  let path = token.replace(LEADING, '').replace(TRAILING, '')
+  let path = trimEnd(token.replace(LEADING, ''), TRAILING)
   if (path.includes('://')) return undefined
   // `--out=plot.png`: the path is what follows the last `=`.
   const equals = path.lastIndexOf('=')
@@ -90,15 +102,18 @@ function normalize(path: string, isWindows: boolean): string {
   for (const part of path.split(/[\\/]+/)) {
     if (part === '' || part === '.') continue
     if (part === '..') {
-      if (out.length > 0 && !/^[A-Za-z]:$/.test(out[out.length - 1]!)) out.pop()
+      // A drive is as far up as a path goes.
+      const last = out.at(-1)
+      if (last !== undefined && !/^[A-Za-z]:$/.test(last)) out.pop()
       continue
     }
     out.push(part)
   }
 
-  const prefix = isUnc ? '\\\\' : isRooted ? separator : ''
+  const joined = out.join(separator)
+  if (isUnc) return '\\\\' + joined
 
-  return prefix + out.join(separator)
+  return isRooted ? separator + joined : joined
 }
 
 /**
@@ -126,7 +141,7 @@ export function baseName(path: string): string {
 
 /** A `file:` address for an absolute path, for a terminal link. */
 export function fileUrl(absolutePath: string): string {
-  const parts = absolutePath.replace(/\\/g, '/').split('/')
+  const parts = absolutePath.replaceAll('\\', '/').split('/')
   const encoded = parts.map((part, index) =>
     index === 0 && /^[A-Za-z]:$/.test(part) ? part : encodeURIComponent(part),
   )

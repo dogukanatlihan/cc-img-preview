@@ -2,6 +2,16 @@
 
 Versions follow [Semantic Versioning](https://semver.org). The version is the one in `.claude-plugin/plugin.json`, and each release has a git tag: `cc-img--v<version>` from 0.2.1 on (the form `claude plugin tag` makes), `v<version>` before that.
 
+## 0.2.4 - 2026-11-18
+
+Two faults a SonarQube scan found, and the code put in order after it.
+
+- Fixed: a long run of dots or closing brackets in a command's output made the mod slow, with a quadratic expression: 80,000 dots took 3.6 seconds. It is a loop now, and takes 3 milliseconds.
+- Fixed: on Linux with no `TMPDIR` the mod kept its thumbnails in `/tmp/cc-img`, where every user of the machine can read and write. They are now in `~/.cache/cc-img`, and on macOS and Linux each session folder is made for its owner alone. Where no temp folder can be found at all, the mod no longer falls back to `/tmp` or `C:\Windows\Temp`: it writes nothing.
+- The code is in smaller parts, with no change to what it does: one function for each helper program, for each `/img` setting, and for each step of making a thumbnail. The scan now finds nothing in the TypeScript or in the C# painter.
+- The Windows painter (`helpers/sixel.cs`) is in smaller parts too. Its Sixel encoder, its reading of markers and its erasing give the same output as before, byte for byte, on test input. It names its version by SHA-256 now, so a painter left running by an earlier version is replaced at the next start. Not yet run on Windows since this change.
+- New: `tools/sonar/scan.sh` scans the TypeScript and the C# in one run.
+
 ## 0.2.3 - 2026-11-18
 
 HEIC.

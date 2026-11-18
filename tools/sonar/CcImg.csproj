@@ -1,0 +1,21 @@
+<!--
+  Builds helpers/sixel.cs for the SonarQube scan only. Nothing here ships: the
+  mod compiles sixel.cs itself, with Add-Type in Windows PowerShell 5.1.
+  That compiler is C# 5 on .NET Framework, so this project is held to both: a
+  newer construct that Add-Type would refuse fails this build too.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>5</LangVersion>
+    <OutputType>Library</OutputType>
+    <RootNamespace>CcImg</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Version>0.0.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../helpers/sixel.cs" Link="helpers/sixel.cs" />
+    <Reference Include="System.Drawing" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

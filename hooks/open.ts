@@ -8,7 +8,7 @@ export const POWERSHELL = ['powershell.exe', '-NoProfile', '-NonInteractive', '-
 
 /** The mod's Windows helper script, run with these arguments. */
 export function windowsHelper(root: string, ...args: string[]): string[] {
-  return [...POWERSHELL, '-File', `${root}\\helpers\\thumb.ps1`, ...args]
+  return [...POWERSHELL, '-File', String.raw`${root}\helpers\thumb.ps1`, ...args]
 }
 
 /**
@@ -19,7 +19,7 @@ export function windowsHelper(root: string, ...args: string[]): string[] {
  * so `tool.exe,icon.png` could start `tool.exe`.
  */
 export function openerArgv(platform: Platform, path: string, root: string): string[] {
-  if (platform === 'win32') return windowsHelper(root, '-Open', path.replace(/\//g, '\\'))
+  if (platform === 'win32') return windowsHelper(root, '-Open', path.replaceAll('/', '\\'))
   if (platform === 'darwin') return ['open', path]
 
   return ['xdg-open', path]

@@ -334,7 +334,7 @@ test('elsewhere the system is told apart by uname', async () => {
   })
 })
 
-test('a system that answers nothing is taken for Linux with /tmp and no tools', async () => {
+test('a system that answers nothing is taken for Linux with no tools and no folder to write in', async () => {
   const run: RunProcess = async () => {
     throw new Error('cannot start')
   }
@@ -342,9 +342,40 @@ test('a system that answers nothing is taken for Linux with /tmp and no tools', 
   expect(await detectEnv(run, '/home/me/mods/cc-img', 's1')).toEqual({
     platform: 'linux',
     root: '/home/me/mods/cc-img',
-    tempDir: '/tmp/cc-img/s1',
+    tempDir: '/dev/null/cc-img/s1',
     tools: { ffmpeg: false, magick: false, rsvg: false },
   })
+})
+
+test('Windows that answers nothing gets no folder either, and not the temp folder all users share', async () => {
+  const run: RunProcess = async () => {
+    throw new Error('cannot start')
+  }
+
+  expect((await detectEnv(run, 'C:\\Users\\me\\mods\\cc-img', 's1')).tempDir).toBe('NUL\\cc-img\\s1')
+})
+
+test('with no TMPDIR the folder is the person\'s own cache folder, and it is made for its owner alone', async () => {
+  const { run, runs } = fake(argv => {
+    if (argv[0] === 'uname') return ok('Linux\n')
+    // What the shell prints for "${TMPDIR:-${XDG_CACHE_HOME:-$HOME/.cache}}" with only HOME set.
+    if (argv.join(' ').includes('XDG_CACHE_HOME')) return ok('/home/me/.cache')
+
+    return argv[0] === 'magick' ? ok('320 180') : ok()
+  })
+
+  const env = await detectEnv(run, '/home/me/mods/cc-img', 's1')
+  expect(env.tempDir).toBe('/home/me/.cache/cc-img/s1')
+  expect(runs.some(one => one.argv.join(' ').includes('/tmp'))).toBe(false)
+
+  await makeThumb(run, { ...env, tools: { ...none, magick: true } }, { src: '/p/a.png', id: 't1', png: false })
+  expect(runs.find(one => one.argv.join(' ').includes('mkdir'))?.argv).toEqual([
+    'sh',
+    '-c',
+    'umask 077 && mkdir -p "$1"',
+    'sh',
+    '/home/me/.cache/cc-img/s1',
+  ])
 })
 
 test('macOS with no tool installed asks sips for the formats only a newer macOS reads', async () => {

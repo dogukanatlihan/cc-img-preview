@@ -1,2 +1,4 @@
 .claude-plugin/types/
 .DS_Store
+.sonarqube/
+tools/sonar/coverage/

@@ -47,11 +47,14 @@ export function fitBox(width: number, height: number, box: Box): { pxW: number; 
   }
 }
 
+/** A picture as R, G, B bytes, top row first. */
+export type Image = { width: number; height: number; rgb: Uint8Array }
+
 /**
  * The pixels of an uncompressed 24-bit or 32-bit BMP, top row first, as
  * R, G, B bytes; undefined for any other file.
  */
-export function parseBmp(bytes: Uint8Array): { width: number; height: number; rgb: Uint8Array } | undefined {
+export function parseBmp(bytes: Uint8Array): Image | undefined {
   if (bytes.length < 54 || bytes[0] !== 0x42 || bytes[1] !== 0x4d) return undefined
 
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
@@ -87,16 +90,23 @@ export function parseBmp(bytes: Uint8Array): { width: number; height: number; rg
   return { width, height, rgb }
 }
 
+/** The average of one colour channel over the pixels of `image` from `left`, `top` up to `right`, `bottom`. */
+function averageOf(image: Image, left: number, top: number, right: number, bottom: number, channel: number): number {
+  let sum = 0
+  for (let y = top; y < bottom; y++) {
+    for (let x = left; x < right; x++) sum += image.rgb[(y * image.width + x) * 3 + channel]!
+  }
+
+  return Math.round(sum / ((bottom - top) * (right - left)))
+}
+
 /**
  * The picture at the shape that shows true in a cell `cellRatio` times as
  * tall as wide. The helpers make it for a cell twice as tall as wide: for a
  * taller cell it is made shorter, for a squatter one narrower, never larger.
  * Each new pixel is the average of the old ones it covers.
  */
-export function forCell(
-  image: { width: number; height: number; rgb: Uint8Array },
-  cellRatio: number,
-): { width: number; height: number; rgb: Uint8Array } {
+export function forCell(image: Image, cellRatio: number): Image {
   const squash = 2 / cellRatio
   const width = squash > 1 ? Math.max(1, Math.round(image.width / squash)) : image.width
   const height = squash < 1 ? Math.max(1, Math.round(image.height * squash)) : image.height
@@ -109,11 +119,8 @@ export function forCell(
     for (let x = 0; x < width; x++) {
       const left = Math.floor((x * image.width) / width)
       const right = Math.max(left + 1, Math.floor(((x + 1) * image.width) / width))
-      for (let c = 0; c < 3; c++) {
-        let sum = 0
-        for (let sy = top; sy < bottom; sy++) for (let sx = left; sx < right; sx++) sum += image.rgb[(sy * image.width + sx) * 3 + c]!
-        rgb[(y * width + x) * 3 + c] = Math.round(sum / ((bottom - top) * (right - left)))
-      }
+      const at = (y * width + x) * 3
+      rgb.set([0, 1, 2].map(channel => averageOf(image, left, top, right, bottom, channel)), at)
     }
   }
 
@@ -136,6 +143,51 @@ const SPLITS = [3, 5, 6, 1, 2, 4, 7]
 const hex = (r: number, g: number, b: number) =>
   '#' + [r, g, b].map(n => Math.round(n).toString(16).padStart(2, '0')).join('')
 
+/** Adds a cell to a row: joined to the run before it when the two share their colours. */
+function addCell(runs: Run[], text: string, fg: string, bg: string): void {
+  const last = runs.at(-1)
+  if (last?.fg === fg && last.bg === bg) last.text += text
+  else runs.push({ text, fg, bg })
+}
+
+/**
+ * A cell's four quarters (at these offsets into `rgb`, in the order of BLOCKS'
+ * bits) as the two groups `split` names: the mean R, G, B of the foreground
+ * in 0 to 2 and of the background in 4 to 6, and how far the pixels are from
+ * the mean of their group.
+ */
+function splitOf(rgb: Uint8Array, at: readonly number[], split: number): { mean: number[]; loss: number } {
+  const groups = at.map((_, quarter) => ((split >> quarter) & 1 ? 0 : 4))
+  // Sums of R, G, B and a count, for the foreground then the background.
+  const sums = [0, 0, 0, 0, 0, 0, 0, 0]
+  at.forEach((offset, quarter) => {
+    const group = groups[quarter]!
+    for (let channel = 0; channel < 3; channel++) sums[group + channel]! += rgb[offset + channel]!
+    sums[group + 3]!++
+  })
+  const mean = sums.map((sum, index) => sum / sums[index < 4 ? 3 : 7]!)
+
+  let loss = 0
+  at.forEach((offset, quarter) => {
+    const group = groups[quarter]!
+    for (let channel = 0; channel < 3; channel++) loss += (rgb[offset + channel]! - mean[group + channel]!) ** 2
+  })
+
+  return { mean, loss }
+}
+
+/** The quarter block and the two colours that lose least of a cell's four pixels. */
+function quarterCell(rgb: Uint8Array, at: readonly number[]): Run {
+  let best = { split: SPLITS[0]!, ...splitOf(rgb, at, SPLITS[0]!) }
+  for (const split of SPLITS.slice(1)) {
+    const tried = splitOf(rgb, at, split)
+    if (tried.loss < best.loss) best = { split, ...tried }
+  }
+  const { mean } = best
+
+  return { text: BLOCKS[best.split]!, fg: hex(mean[0]!, mean[1]!, mean[2]!), bg: hex(mean[4]!, mean[5]!, mean[6]!) }
+}
+
 /**
  * Rows of quarter blocks for `width * height` R, G, B pixels drawn `columns`
  * cells across, two pixel rows to a row of cells. A cell has two colours, so
@@ -157,8 +209,6 @@ export function toRows(
 ): Run[][] {
   const rows: Run[][] = []
   const shown = Math.max(1, Math.min(columns, Math.floor(maxColumns)))
-  // The four quarters' offsets into `rgb`, in the order of BLOCKS' bits.
-  const at = [0, 0, 0, 0]
 
   for (let y = 0; y < height; y += 2) {
     const runs: Run[] = []
@@ -167,35 +217,9 @@ export function toRows(
     for (let cell = 0; cell < shown; cell++) {
       const left = Math.floor((cell * 2 * width) / (columns * 2))
       const right = Math.floor(((cell * 2 + 1) * width) / (columns * 2))
-      at[0] = (y * width + left) * 3
-      at[1] = (y * width + right) * 3
-      at[2] = (lower * width + left) * 3
-      at[3] = (lower * width + right) * 3
-
-      let best = { block: '', fg: '', bg: '', loss: Infinity }
-      for (const split of SPLITS) {
-        // Sums of R, G, B and a count, for the foreground then the background.
-        const sums = [0, 0, 0, 0, 0, 0, 0, 0]
-        for (let quarter = 0; quarter < 4; quarter++) {
-          const group = (split >> quarter) & 1 ? 0 : 4
-          for (let channel = 0; channel < 3; channel++) sums[group + channel]! += rgb[at[quarter]! + channel]!
-          sums[group + 3]!++
-        }
-        const mean = sums.map((sum, index) => sum / sums[index < 4 ? 3 : 7]!)
-
-        let loss = 0
-        for (let quarter = 0; quarter < 4; quarter++) {
-          const group = (split >> quarter) & 1 ? 0 : 4
-          for (let channel = 0; channel < 3; channel++) loss += (rgb[at[quarter]! + channel]! - mean[group + channel]!) ** 2
-        }
-        if (loss < best.loss) {
-          best = { block: BLOCKS[split]!, fg: hex(mean[0]!, mean[1]!, mean[2]!), bg: hex(mean[4]!, mean[5]!, mean[6]!), loss }
-        }
-      }
-
-      const last = runs[runs.length - 1]
-      if (last && last.fg === best.fg && last.bg === best.bg) last.text += best.block
-      else runs.push({ text: best.block, fg: best.fg, bg: best.bg })
+      const quarters = [y * width + left, y * width + right, lower * width + left, lower * width + right]
+      const best = quarterCell(rgb, quarters.map(pixel => pixel * 3))
+      addCell(runs, best.text, best.fg, best.bg)
     }
     rows.push(runs)
   }
@@ -247,6 +271,48 @@ export function octant(pattern: number): string | undefined {
 /** How many bytes a cell is kept in: its pattern, then its two colours. */
 const CELL_BYTES = 7
 
+/** The colour channel that varies most among a cell's pixels, and the middle of its range. */
+function widestChannel(rgb: Uint8Array, at: readonly number[]): { channel: number; middle: number } {
+  let best = { channel: 0, middle: 0, spread: -1 }
+  for (let channel = 0; channel < 3; channel++) {
+    let low = 255
+    let high = 0
+    for (const offset of at) {
+      low = Math.min(low, rgb[offset + channel]!)
+      high = Math.max(high, rgb[offset + channel]!)
+    }
+    if (high - low > best.spread) best = { channel, middle: (high + low) / 2, spread: high - low }
+  }
+
+  return best
+}
+
+/**
+ * A cell's pixels in two groups, those above `middle` in `channel` and the
+ * rest: the pattern of the first group (bit `pixel`), and each group's
+ * average colour.
+ */
+function twoColours(
+  rgb: Uint8Array,
+  at: readonly number[],
+  channel: number,
+  middle: number,
+): { pattern: number; first: number[]; second: number[] } {
+  let pattern = 0
+  // R, G, B and a count, of the first colour's pixels then the second's.
+  const sums = [0, 0, 0, 0, 0, 0, 0, 0]
+  at.forEach((offset, pixel) => {
+    const isFirst = rgb[offset + channel]! > middle
+    const group = isFirst ? 0 : 4
+    if (isFirst) pattern |= 1 << pixel
+    for (let c = 0; c < 3; c++) sums[group + c]! += rgb[offset + c]!
+    sums[group + 3]!++
+  })
+  const average = (group: number) => [0, 1, 2].map(c => Math.round(sums[group + c]! / Math.max(1, sums[group + 3]!)))
+
+  return { pattern, first: average(0), second: average(4) }
+}
+
 /**
  * A picture as cells, each two pixels across and `down` pixel rows tall.
  *
@@ -265,59 +331,31 @@ export function cellsOf(
   const columns = Math.ceil(width / 2)
   const rows = Math.ceil(height / down)
   const cells = new Uint8Array(columns * rows * CELL_BYTES)
-  const count = down * 2
-  const full = (1 << count) - 1
-  const at = new Array<number>(count).fill(0)
+  const full = (1 << (down * 2)) - 1
+  const at = new Array<number>(down * 2).fill(0)
+  // Where a cell's pixel is in `rgb`. A picture that ends part way through a
+  // cell repeats its last row or column.
+  const offsetOf = (row: number, cell: number, pixel: number) => {
+    const x = Math.min(cell * 2 + (pixel & 1), width - 1)
+    const y = Math.min(row * down + (pixel >> 1), height - 1)
+
+    return (y * width + x) * 3
+  }
 
   for (let row = 0; row < rows; row++) {
     for (let cell = 0; cell < columns; cell++) {
-      // A picture that ends part way through a cell repeats its last row or column.
-      for (let pixel = 0; pixel < count; pixel++) {
-        const x = Math.min(cell * 2 + (pixel & 1), width - 1)
-        const y = Math.min(row * down + (pixel >> 1), height - 1)
-        at[pixel] = (y * width + x) * 3
+      for (let pixel = 0; pixel < at.length; pixel++) at[pixel] = offsetOf(row, cell, pixel)
+      const { channel, middle } = widestChannel(rgb, at)
+      const split = twoColours(rgb, at, channel, middle)
+      let colours = [split.pattern, ...split.first, ...split.second]
+      // One colour: a full block of it.
+      if (split.pattern === 0) colours = [full, ...split.second, ...split.second]
+      // No block for this pattern: its opposite, with the two colours swapped.
+      else if (down === 4 && OCTANTS[split.pattern] === undefined) {
+        colours = [full - split.pattern, ...split.second, ...split.first]
       }
 
-      let channel = 0
-      let middle = 0
-      let widest = -1
-      for (let c = 0; c < 3; c++) {
-        let low = 255
-        let high = 0
-        for (const offset of at) {
-          low = Math.min(low, rgb[offset + c]!)
-          high = Math.max(high, rgb[offset + c]!)
-        }
-        if (high - low > widest) {
-          widest = high - low
-          channel = c
-          middle = (high + low) / 2
-        }
-      }
-
-      let pattern = 0
-      // R, G, B and a count, of the first colour's pixels then the second's.
-      const sums = [0, 0, 0, 0, 0, 0, 0, 0]
-      at.forEach((offset, pixel) => {
-        const isFirst = rgb[offset + channel]! > middle
-        const group = isFirst ? 0 : 4
-        if (isFirst) pattern |= 1 << pixel
-        for (let c = 0; c < 3; c++) sums[group + c]! += rgb[offset + c]!
-        sums[group + 3]!++
-      })
-
-      let first = [0, 1, 2].map(c => Math.round(sums[c]! / Math.max(1, sums[3]!)))
-      let second = [4, 5, 6].map(c => Math.round(sums[c]! / Math.max(1, sums[7]!)))
-      if (pattern === 0) {
-        // One colour: a full block of it.
-        pattern = full
-        first = second
-      } else if (down === 4 && OCTANTS[pattern] === undefined) {
-        pattern = full - pattern
-        ;[first, second] = [second, first]
-      }
-
-      cells.set([pattern, ...first, ...second], (row * columns + cell) * CELL_BYTES)
+      cells.set(colours, (row * columns + cell) * CELL_BYTES)
     }
   }
 
@@ -340,12 +378,7 @@ export function rowsOf(cells: Uint8Array, columns: number, rows: number, down: n
     for (let cell = 0; cell < shown; cell++) {
       const from = (row * columns + cell) * CELL_BYTES
       if (from + CELL_BYTES > cells.length) break
-      const block = blocks[cells[from]!] ?? '█'
-      const fg = colour(from + 1)
-      const bg = colour(from + 4)
-      const last = runs[runs.length - 1]
-      if (last && last.fg === fg && last.bg === bg) last.text += block
-      else runs.push({ text: block, fg, bg })
+      addCell(runs, blocks[cells[from]!] ?? '█', colour(from + 1), colour(from + 4))
     }
     drawn.push(runs)
   }

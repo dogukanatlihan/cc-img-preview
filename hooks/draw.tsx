@@ -5,6 +5,7 @@ import type { Mode, Thumb } from '../types'
 
 import { fileUrl } from './paths'
 import { rowsOf, toRows } from './pixels'
+import type { Run } from './pixels'
 
 type Table = Elements['terminal']
 
@@ -52,7 +53,7 @@ const BRAILLE = 0x2800
 export function pictureId(seed: string): string {
   // FNV-1a, folded to 24 bits.
   let hash = 0x811c9dc5
-  for (let at = 0; at < seed.length; at++) hash = Math.imul(hash ^ seed.charCodeAt(at), 0x01000193)
+  for (const char of seed) hash = Math.imul(hash ^ char.codePointAt(0)!, 0x01000193)
 
   return (((hash >>> 24) ^ hash) & 0xffffff).toString(16).padStart(6, '0')
 }
@@ -67,16 +68,19 @@ export function pictureId(seed: string): string {
  * with a second bar to end it.
  */
 export function markerOf(id: string, row: number): string {
-  const start = String.fromCharCode(BRAILLE + Math.min(row, 255), 0x2595)
-  if (!/^[0-9a-f]{6}$/.test(id)) return start + id + String.fromCharCode(0x258f)
+  const start = String.fromCodePoint(BRAILLE + Math.min(row, 255), 0x2595)
+  if (!/^[0-9a-f]{6}$/.test(id)) return start + id + String.fromCodePoint(0x258f)
 
-  return start + String.fromCharCode(...[0, 2, 4].map(at => BRAILLE + parseInt(id.slice(at, at + 2), 16)))
+  return start + String.fromCodePoint(...[0, 2, 4].map(at => BRAILLE + Number.parseInt(id.slice(at, at + 2), 16)))
 }
 
 /** A stretch of cells in one pair of colours; no `bg` is the terminal's own. */
 type Stretch = { text: string; fg: string; bg?: string }
 
-const channels = (hex: string) => [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16))
+/** A stretch with no `bg` keeps the terminal's own background. */
+const backgroundOf = (run: Stretch) => (run.bg === undefined ? {} : { backgroundColor: run.bg })
+
+const channels = (hex: string) => [1, 3, 5].map(at => Number.parseInt(hex.slice(at, at + 2), 16))
 
 /** The colour half way between two. */
 const between = (a: string, b: string) => {
@@ -115,14 +119,28 @@ export function sixelRow(id: string, row: number, columns: number, under: readon
       const hidden = between(below.fg, below.bg)
       next = { text: mark, fg: hidden, bg: hidden }
     } else if (mark !== undefined) next = { text: mark, fg: MARKER_COLOR }
-    else next = below ?? { text: String.fromCharCode(BRAILLE), fg: MARKER_COLOR }
+    else next = below ?? { text: String.fromCodePoint(BRAILLE), fg: MARKER_COLOR }
 
-    const last = runs[runs.length - 1]
-    if (last && last.fg === next.fg && last.bg === next.bg) last.text += next.text
+    const last = runs.at(-1)
+    if (last?.fg === next.fg && last.bg === next.bg) last.text += next.text
     else runs.push({ ...next })
   }
 
   return runs
+}
+
+/** A thumbnail's rows of blocks, at most `room` cells across; undefined when it has no picture. */
+function blockRows(thumb: Thumb, room: number): Run[][] | undefined {
+  if (thumb.columns === 0) return undefined
+  if (thumb.cells !== undefined) {
+    return rowsOf(Uint8Array.fromBase64(thumb.cells), thumb.columns, thumb.rows, thumb.down ?? 2, room)
+  }
+  // Kept as pixels, by an earlier version.
+  if (thumb.rgb !== undefined && thumb.pxH !== undefined) {
+    return toRows(Uint8Array.fromBase64(thumb.rgb), thumb.pxW ?? thumb.columns, thumb.pxH, thumb.columns, room)
+  }
+
+  return undefined
 }
 
 /**
@@ -183,15 +201,11 @@ export function Thumbnail(
       <Box flexDirection="column">
         {Array.from({ length: thumb.six.rows }, (_, row) => (
           <Box key={`img${index}-s${row}`} flexDirection="row">
-            {sixelRow(id, row, columns, blocks[row]).map(run =>
-              run.bg === undefined ? (
-                <Text color={run.fg}>{run.text}</Text>
-              ) : (
-                <Text color={run.fg} backgroundColor={run.bg}>
-                  {run.text}
-                </Text>
-              ),
-            )}
+            {sixelRow(id, row, columns, blocks[row]).map((run, at) => (
+              <Text key={`img${index}-s${row}-${at}`} color={run.fg} {...backgroundOf(run)}>
+                {run.text}
+              </Text>
+            ))}
           </Box>
         ))}
         {Caption(els, thumb, index, onOpen, true, extra)}
@@ -199,23 +213,15 @@ export function Thumbnail(
     )
   }
 
-  // Kept as cells; or as pixels, by an earlier version.
-  const rows =
-    thumb.columns === 0
-      ? undefined
-      : thumb.cells !== undefined
-        ? rowsOf(Uint8Array.fromBase64(thumb.cells), thumb.columns, thumb.rows, thumb.down ?? 2, room)
-        : thumb.rgb !== undefined && thumb.pxH !== undefined
-          ? toRows(Uint8Array.fromBase64(thumb.rgb), thumb.pxW ?? thumb.columns, thumb.pxH, thumb.columns, room)
-          : undefined
+  const rows = blockRows(thumb, room)
   if (rows === undefined) return Caption(els, thumb, index, onOpen, true, extra)
 
   return (
     <Box flexDirection="column">
       {rows.map((runs, row) => (
         <Button key={`img${index}-r${row}`} label={`open ${thumb.name}`} plain onPress={onOpen}>
-          {runs.map(run => (
-            <Text color={run.fg} backgroundColor={run.bg}>
+          {runs.map((run, at) => (
+            <Text key={`img${index}-r${row}-${at}`} color={run.fg} backgroundColor={run.bg}>
               {run.text}
             </Text>
           ))}

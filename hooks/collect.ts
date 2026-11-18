@@ -21,7 +21,7 @@ const NETWORK_PATH = /^(\\\\|\/\/)/
 /** A file's modified time may trail the clock a little. */
 const SLACK_MS = 2000
 /** Tools whose own target is the only file they touch. */
-const FILE_TOOLS = ['Read', 'Write', 'Edit']
+const FILE_TOOLS = new Set(['Read', 'Write', 'Edit'])
 
 /** `home`: the person's home folder, which `~/` in a path stands for. */
 type Call = { tool: string; input: unknown; cwd: string; startedAt: number; home?: string }
@@ -72,7 +72,7 @@ function images(value: unknown, out: Candidate[] = [], depth = 0, seen = new Set
 
 /** The images a finished call may have touched: files to check, then pictures in its result. */
 export function collect(call: Call, ran: Ran): Candidate[] {
-  if (FILE_TOOLS.includes(call.tool)) {
+  if (FILE_TOOLS.has(call.tool)) {
     const target = isRecord(call.input) ? call.input.file_path : undefined
 
     return typeof target === 'string' && isImagePath(target)

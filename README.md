@@ -175,8 +175,8 @@ SVG needs ImageMagick or `rsvg-convert`. On Windows and Linux, HEIC (`.heic`, `.
 - **Nothing changes for Claude.** The mod adds no tool, and changes no tool call, no result and no prompt.
 - **A click opens only images.** Only image files the mod recorded itself can be opened, so a click never starts a program or a script. A file name that turns out to be a link to something that is not an image is not shown and not opened.
 - **Only local paths.** Image paths found in a command's text are only looked at on this machine: a network path (`\\host\share\a.png`) in tool output is ignored, unless Claude itself read that file.
-- **Temporary files.** Thumbnails, and pictures that have no file of their own (tool screenshots and pasted images), are saved to `<temp folder>/cc-img/`. Folders there are deleted after 7 days.
-- **Environment variables it reads:** `TERM_PROGRAM`, `LC_TERMINAL`, `WT_SESSION`, `TMUX`, `HERDR_ENV`, `HOME`, and the temp folder's (`TMPDIR`, `TEMP`, `TMP`).
+- **Temporary files.** Thumbnails, and pictures that have no file of their own (tool screenshots and pasted images), are saved to `<temp folder>/cc-img/`. Folders there are deleted after 7 days. On macOS and Linux each folder is made for your user alone, and where no `TMPDIR` is set (most of Linux) it is `~/.cache/cc-img/`, not `/tmp`.
+- **Environment variables it reads:** `TERM_PROGRAM`, `LC_TERMINAL`, `WT_SESSION`, `TMUX`, `HERDR_ENV`, `HOME`, and the temp folder's (`TMPDIR`, `TEMP`, `TMP`; in a shell also `XDG_CACHE_HOME`).
 
 ## If something looks wrong
 
@@ -208,9 +208,9 @@ SVG needs ImageMagick or `rsvg-convert`. On Windows and Linux, HEIC (`.heic`, `.
 | --- | --- |
 | Windows 11, Windows Terminal 1.25 | Block thumbnails and the Sixel painter, both directly and inside herdr 0.9.5. The Windows helper and the `ffmpeg` path have been run on real files. |
 | macOS 27, iTerm2 3.7.7, Claude Code 2.1.327 | Block thumbnails for files Claude read and files a command wrote (png, jpg, webp, names with escaped spaces), a click on a thumbnail, `/img`, `/img cell 7x17`, and real pixels after a Yes in iTerm2's dialogs. The `sips` commands have been run by hand on png, jpg, gif, bmp, tif, webp, avif and ico files. |
-| macOS 27, Rex Beta 0.1.0 | Block thumbnails, and real pixels with `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1`, the first picture of a session included, and the thumbnail of a HEIC file a command wrote. The two pictures at the top of this page were taken there. |
+| macOS 27, Rex Beta 0.1.0 | Block thumbnails, and real pixels with `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1`, the first picture of a session included, the thumbnail of a HEIC file a command wrote, and the thumbnails of two images pasted into one prompt. The two pictures at the top of this page were taken there. |
 
-Not yet run on a real machine or terminal: Linux, kitty and Ghostty, pasted images and tool screenshots on macOS, the file name link, and octant blocks on macOS.
+Not yet run on a real machine or terminal: Linux, kitty and Ghostty, tool screenshots on macOS, the file name link, and octant blocks on macOS.
 
 If you run the mod somewhere that is not in this table, an [issue](https://github.com/dogukanatlihan/cc-img-preview/issues) that says what you saw is welcome, whether it worked or not.
 
@@ -240,6 +240,9 @@ The type check needs the types Claude Code writes into `.claude-plugin/types/` w
 | `hooks/pixels.ts`, `hooks/draw.tsx` | Pixels to block characters, and what is drawn under a row. |
 | `helpers/` | The Windows thumbnail helper and Sixel painter. |
 | `hooks/*.test.ts`, `hooks/*.test.tsx` | The tests. |
+| `tools/sonar/` | A SonarQube scan of the TypeScript and the C# painter: `tools/sonar/scan.sh`. |
+
+`tools/sonar/scan.sh` needs bun, the .NET SDK with `dotnet-sonarscanner`, and a SonarQube server with a token in `SONAR_TOKEN`. It builds `helpers/sixel.cs` as C# 5 for .NET Framework, which is what Windows PowerShell compiles it as: a construct the painter could not be compiled with on Windows fails that build. It measures coverage for every module but `hooks/register.tsx`, whose tests run only inside Claude Code's own test runner, which reports none.
 
 The design is in `docs/superpowers/specs/`, the build plan in `docs/superpowers/plans/`, and every decision made since, with its reason, in `.superpowers/sdd/2026-11-17-cc-img/progress.md`. The versions are in [CHANGELOG.md](CHANGELOG.md).
 

@@ -142,7 +142,7 @@ function roomOf(e: { viewport?: { columns: number; rows: number } }): number {
 /** The cell shape `7x17` names, as height over width; undefined for what names none a terminal has. */
 function ratioOf(value: unknown): number | undefined {
   const sizes = typeof value === 'string' ? /^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/.exec(value) : null
-  const ratio = sizes ? Number(sizes[2]) / Number(sizes[1]) : NaN
+  const ratio = sizes ? Number(sizes[2]) / Number(sizes[1]) : Number.NaN
 
   return ratio >= 1 && ratio <= 4 ? ratio : undefined
 }
@@ -163,7 +163,7 @@ const sizeToMake = () => ({
 async function startPainter($: EngineInterface, machine: Env, host: 'claude' | 'herdr'): Promise<boolean> {
   // It reads every session's pictures from the folder that holds their folders.
   const home = machine.tempDir.slice(0, machine.tempDir.lastIndexOf('\\'))
-  const argv = [...POWERSHELL, '-File', `${machine.root}\\helpers\\sixel.ps1`, '-Start', '-Dir', home, '-Screen', host]
+  const argv = [...POWERSHELL, '-File', String.raw`${machine.root}\helpers\sixel.ps1`, '-Start', '-Dir', home, '-Screen', host]
   const ran = await $.process.run(argv, { timeoutMs: TIMEOUT_MS }).catch(() => undefined)
   isPainting = ran?.exitCode === 0
   // Rows already drawn in blocks are drawn again as the painter's.
@@ -171,7 +171,7 @@ async function startPainter($: EngineInterface, machine: Env, host: 'claude' | '
   // Said once a session: the start is asked for once, and its answer kept.
   else {
     $.ui.toast(
-      `cc-img: real pictures could not start here, so images are drawn in block characters. Why: ${home}\\sixel.log`,
+      String.raw`cc-img: real pictures could not start here, so images are drawn in block characters. Why: ${home}\sixel.log`,
     )
   }
 
@@ -201,9 +201,8 @@ async function setUp($: EngineInterface): Promise<Env> {
     const separator = found.platform === 'win32' ? '\\' : '/'
     const home = found.tempDir.slice(0, found.tempDir.lastIndexOf(separator))
     const names = (await $.fs.list(home)).map(entry => entry.name)
-    for (const name of staleFolders(names, now)) {
-      await run(removeArgv(found, `${home}${separator}${name}`), { timeoutMs: TIMEOUT_MS })
-    }
+    const stale = staleFolders(names, now).map(name => removeArgv(found, `${home}${separator}${name}`))
+    await Promise.all(stale.map(argv => run(argv, { timeoutMs: TIMEOUT_MS })))
   } catch {
     // nothing to clear, or it would not clear: both are fine
   }
@@ -211,33 +210,60 @@ async function setUp($: EngineInterface): Promise<Env> {
   return found
 }
 
-/** Notes an image as the newest, and lets go of the pictures past the newest forty. */
-async function remember($: EngineInterface, rowId: string, openPath: string): Promise<void> {
+/**
+ * Does `work` for each item, one after the other, and answers what each gave,
+ * in order. For work on a prompt's pasted images: they are read from the
+ * engine and made into thumbnails one at a time, as they always were.
+ */
+function inTurn<T, R>(items: readonly T[], work: (item: T) => Promise<R>): Promise<R[]> {
+  // Each step waits for the one before it, and only then starts its own work.
+  return items.reduce<Promise<R[]>>(async (before, item) => [...(await before), await work(item)], Promise.resolve([]))
+}
+
+/** Notes images as the newest, in this order, and lets go of the pictures past the newest forty. */
+async function remember($: EngineInterface, rowId: string, openPaths: readonly string[]): Promise<void> {
   let dropped: Recent = []
 
   await update($, recentList, recent => {
-    const next = addToRecent(recent, { rowId, openPath })
-    dropped = next.dropped
+    // An update that lost a race is done again: what it dropped starts empty each time.
+    dropped = []
 
-    return next.recent
+    return openPaths.reduce((kept, openPath) => {
+      const next = addToRecent(kept, { rowId, openPath })
+      dropped.push(...next.dropped)
+
+      return next.recent
+    }, recent)
   })
-  for (const one of dropped) {
-    await update($, memberOf(rows, { requestId: one.rowId }), row => withoutPicture(row, one.openPath))
-  }
+  await Promise.all(
+    dropped.map(one => update($, memberOf(rows, { requestId: one.rowId }), row => withoutPicture(row, one.openPath))),
+  )
+}
+
+/** The thumbnail of one image, named and sized as this session makes them now. */
+async function thumbOf(
+  $: EngineInterface,
+  machine: Env,
+  candidate: Candidate,
+  tool: string,
+  png: boolean,
+): Promise<Thumb | undefined> {
+  const number = ++made
+  const six = (await painting($, machine)) ? { six: pictureId(`${stamp}:${number}`) } : {}
+
+  return thumbFor(depsOf($), machine, candidate, { id: `t${number}`, tool, png, ...sizeToMake(), ...six })
 }
 
 /** A finished call's images become thumbnails under its row. */
 async function workJob($: EngineInterface, machine: Env, job: Job, png: boolean): Promise<void> {
   let shown = 0
 
+  // One at a time: most paths a command names fall away, and the work ends at the fourth image shown.
   for (const candidate of job.candidates) {
-    const id = `t${++made}`
-    const six = (await painting($, machine)) ? { six: pictureId(`${stamp}:${made}`) } : {}
-    const options = { id, tool: job.tool, png, ...sizeToMake(), ...six }
-    const thumb = await thumbFor(depsOf($), machine, candidate, options)
+    const thumb = await thumbOf($, machine, candidate, job.tool, png)
     if (!thumb) continue
     await update($, memberOf(rows, { requestId: job.rowId }), row => addToRow(row, thumb))
-    await remember($, job.rowId, thumb.openPath)
+    await remember($, job.rowId, [thumb.openPath])
     // Counted here, after the files a command only named have fallen away.
     if (++shown >= MAX_PER_CALL) break
   }
@@ -245,20 +271,15 @@ async function workJob($: EngineInterface, machine: Env, job: Job, png: boolean)
 
 /** A prompt's pasted images become thumbnails that wait for its message row. */
 async function workPaste($: EngineInterface, machine: Env, paste: Paste, png: boolean): Promise<void> {
-  const images: Thumb[] = []
-
-  for (const media of paste.media) {
-    const candidate: Candidate = { kind: 'bytes', base64: media.base64, mediaType: media.mediaType }
-    const id = `t${++made}`
-    const six = (await painting($, machine)) ? { six: pictureId(`${stamp}:${made}`) } : {}
-    const options = { id, tool: media.name, png, ...sizeToMake(), ...six }
-    const thumb = await thumbFor(depsOf($), machine, candidate, options)
-    if (thumb) images.push(thumb)
-  }
+  const thumbs = await inTurn(paste.media, media =>
+    thumbOf($, machine, { kind: 'bytes', base64: media.base64, mediaType: media.mediaType }, media.name, png),
+  )
+  const images = thumbs.filter(thumb => thumb !== undefined)
   if (images.length === 0) return
 
+  const paths = images.map(thumb => thumb.openPath)
   await update($, pendingList, list => addPending(list, { text: paste.text, images, notFor: paste.notFor }))
-  for (const thumb of images) await remember($, UNNAMED_ROW, thumb.openPath)
+  await remember($, UNNAMED_ROW, paths)
 }
 
 /** The waiting images of a prompt become those of the row that drew them. */
@@ -364,10 +385,9 @@ async function openImage($: EngineInterface, path: string): Promise<boolean> {
 
 /** The images kept under these rows, in order. */
 async function imagesOf($: EngineInterface, rowIds: readonly string[]): Promise<Thumb[]> {
-  const images: Thumb[] = []
-  for (const id of rowIds) images.push(...(await read($, memberOf(rows, { requestId: id }))).images)
+  const kept = await Promise.all(rowIds.map(id => read($, memberOf(rows, { requestId: id }))))
 
-  return images
+  return kept.flatMap(row => row.images)
 }
 
 /** The engine's row with these images under it. */
@@ -410,6 +430,99 @@ async function drawUnder(
   )
 }
 
+/**
+ * Whose screen the Sixel painter paints on; undefined where no Sixel gets
+ * through. herdr and tmux sit between Claude Code and the terminal, and pass
+ * none on: past herdr the painter can go, past tmux it cannot.
+ */
+function hostOf(vars: { tmux?: string; herdr?: string; windowsTerminal?: string }): 'claude' | 'herdr' | undefined {
+  if (vars.tmux) return undefined
+  if (vars.herdr) return 'herdr'
+
+  return vars.windowsTerminal ? 'claude' : undefined
+}
+
+/** The images among a prompt's attachments, read whole. */
+async function pasted(
+  $: EngineInterface,
+  attachments: readonly { type: string; id?: string; filename?: string }[],
+): Promise<Paste['media']> {
+  const read = await inTurn(attachments, async item => {
+    if (item.type !== 'image' || item.id === undefined) return undefined
+    const image = await readMedia(args => $.prompt.media(args), item.id)
+
+    return image && { ...image, name: (item.filename ?? 'pasted').replace(/\.[A-Za-z0-9]+$/, '') }
+  })
+
+  return read.filter(image => image !== undefined)
+}
+
+/** `/img fine` and `/img coarse`: the blocks thumbnails are drawn in from now on. */
+async function setBlocks($: EngineInterface, asked: 'fine' | 'coarse'): Promise<void> {
+  blocks = asked === 'fine' ? 'octant' : 'quarter'
+  await $.store.set(BLOCKS_KEY, blocks).catch(() => undefined)
+  $.ui.toast(
+    asked === 'fine'
+      ? 'Thumbnails from now on use octant blocks. If they show as boxes or question marks, your font lacks them: /img coarse.'
+      : 'Thumbnails from now on use quarter blocks.',
+  )
+}
+
+/** What the person is told after `/img pixels on` or `/img pixels off`. */
+function pixelsSaid(): string {
+  if (!wantsPixels) return 'Images are drawn in block characters, in every terminal.'
+
+  return isITerm
+    ? 'Real pictures are on. iTerm2 asks before each one: tick "Remember my choice", then Yes.'
+    : 'Images are drawn as real pictures again, where the terminal can.'
+}
+
+/** `/img pixels on` and `/img pixels off`: real pictures, or block characters in every terminal. */
+async function setPixels($: EngineInterface, isOn: boolean): Promise<void> {
+  wantsPixels = isOn
+  // A test picture not yet answered is sent again from the next thumbnail drawn.
+  if (probe !== 'done') probe = undefined
+  await $.store.set(PIXELS_KEY, isOn ? 'on' : 'off').catch(() => undefined)
+  $.ui.invalidate('ui.render')
+  $.ui.toast(pixelsSaid())
+}
+
+/** `/img size 40`: the most columns a thumbnail takes. */
+async function setSize($: EngineInterface, value: string | undefined): Promise<void> {
+  const width = Number(value)
+  if (!isWidth(width)) {
+    $.ui.toast(SIZE_HELP)
+
+    return
+  }
+  widest = width
+  await $.store.set(COLUMNS_KEY, width).catch(() => undefined)
+  $.ui.toast(`Thumbnails from now on are at most ${width} columns wide and ${Math.round(width / 2)} rows tall.`)
+}
+
+/** `/img cell 7x17`: the size of one terminal cell. */
+async function setCell($: EngineInterface, shape: string | undefined): Promise<void> {
+  const ratio = ratioOf(shape)
+  if (ratio === undefined) {
+    $.ui.toast(CELL_HELP)
+
+    return
+  }
+  cellRatio = ratio
+  await $.store.set(CELL_KEY, shape).catch(() => undefined)
+  $.ui.toast(`Thumbnails from now on are made for a cell of ${shape}.`)
+}
+
+/** `/img` and `/img 2`: opens the newest image, or the one so many before it. */
+async function openRecent($: EngineInterface, asked: string): Promise<void> {
+  const recent = await read($, recentList)
+  const back = asked === '' ? 1 : Number(asked)
+  const entry = Number.isInteger(back) && back >= 1 ? recent.at(-back) : undefined
+
+  if (!entry) $.ui.toast('No such image.')
+  else if (await openImage($, entry.openPath)) $.ui.toast(`Opened ${baseName(entry.openPath)}.`)
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -433,11 +546,10 @@ export const register: Register = on => {
     home = (await $.env.get('HOME').catch(() => undefined)) || undefined
     // Rows drawn before this was known were drawn in blocks.
     if (wantsPixels) $.ui.invalidate('ui.render')
-    // herdr and tmux sit between Claude Code and the terminal, and pass no Sixel on.
     const windowsTerminal = await $.env.get('WT_SESSION').catch(() => undefined)
     const herdr = await $.env.get('HERDR_ENV').catch(() => undefined)
     const tmux = await $.env.get('TMUX').catch(() => undefined)
-    sixelHost = tmux ? undefined : herdr ? 'herdr' : windowsTerminal ? 'claude' : undefined
+    sixelHost = hostOf({ tmux, herdr, windowsTerminal })
     stamp = Math.floor((await $.clock.now().catch(() => 0)) / 1000).toString(36)
     await $.command.register({
       name: 'img',
@@ -470,17 +582,7 @@ export const register: Register = on => {
 
   // A pasted image can only be read while its prompt is being sent.
   on('prompt.submit', async ($, e, next) => {
-    const media: Paste['media'] = []
-
-    try {
-      for (const item of e.attachments ?? []) {
-        if (item.type !== 'image' || item.id === undefined) continue
-        const image = await readMedia(args => $.prompt.media(args), item.id)
-        if (image) media.push({ ...image, name: (item.filename ?? 'pasted').replace(/\.[A-Za-z0-9]+$/, '') })
-      }
-    } catch {
-      // the prompt goes on whatever happened here
-    }
+    const media = await pasted($, e.attachments ?? []).catch((): Paste['media'] => [])
 
     // Taken before the prompt goes on: once it has, its own row may already
     // be on screen, and would be counted among the rows that came before it.
@@ -492,67 +594,19 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'img' }, async ($, e) => {
-    const recent = await read($, recentList)
     // A bare `/img` may come with no args at all.
     const asked = (e.args ?? '').trim()
-    if (asked === 'fine' || asked === 'coarse') {
-      blocks = asked === 'fine' ? 'octant' : 'quarter'
-      await $.store.set(BLOCKS_KEY, blocks).catch(() => undefined)
-      $.ui.toast(
-        asked === 'fine'
-          ? 'Thumbnails from now on use octant blocks. If they show as boxes or question marks, your font lacks them: /img coarse.'
-          : 'Thumbnails from now on use quarter blocks.',
-      )
+    const [word, value] = asked.split(/\s+/)
 
-      return {}
-    }
-    if (asked === 'pixels on' || asked === 'pixels off') {
-      wantsPixels = asked === 'pixels on'
-      // A test picture not yet answered is sent again from the next thumbnail drawn.
-      if (probe !== 'done') probe = undefined
-      await $.store.set(PIXELS_KEY, wantsPixels ? 'on' : 'off').catch(() => undefined)
-      $.ui.invalidate('ui.render')
-      $.ui.toast(
-        wantsPixels
-          ? isITerm
-            ? 'Real pictures are on. iTerm2 asks before each one: tick "Remember my choice", then Yes.'
-            : 'Images are drawn as real pictures again, where the terminal can.'
-          : 'Images are drawn in block characters, in every terminal.',
-      )
+    if (asked === 'fine' || asked === 'coarse') await setBlocks($, asked)
+    else if (asked === 'pixels on' || asked === 'pixels off') await setPixels($, asked === 'pixels on')
+    else if (word === 'size') await setSize($, value)
+    else if (word === 'cell') await setCell($, value)
+    else await openRecent($, asked)
 
-      return {}
-    }
-    if (asked.split(/\s+/)[0] === 'size') {
-      const width = Number(asked.split(/\s+/)[1])
-      if (!isWidth(width)) $.ui.toast(SIZE_HELP)
-      else {
-        widest = width
-        await $.store.set(COLUMNS_KEY, width).catch(() => undefined)
-        $.ui.toast(`Thumbnails from now on are at most ${width} columns wide and ${Math.round(width / 2)} rows tall.`)
-      }
-
-      return {}
-    }
-    if (asked.split(/\s+/)[0] === 'cell') {
-      const shape = asked.split(/\s+/)[1]
-      const ratio = ratioOf(shape)
-      if (ratio === undefined) $.ui.toast(CELL_HELP)
-      else {
-        cellRatio = ratio
-        await $.store.set(CELL_KEY, shape).catch(() => undefined)
-        $.ui.toast(`Thumbnails from now on are made for a cell of ${shape}.`)
-      }
-
-      return {}
-    }
-    const back = asked === '' ? 1 : Number(asked)
-    const entry = Number.isInteger(back) && back >= 1 ? recent[recent.length - back] : undefined
     // The answer carries no text: a command's text is kept in what Claude
     // reads, and nothing of this mod is to reach Claude. The person is told
     // by a toast instead.
-    if (!entry) $.ui.toast('No such image.')
-    else if (await openImage($, entry.openPath)) $.ui.toast(`Opened ${baseName(entry.openPath)}.`)
-
     return {}
   })
 

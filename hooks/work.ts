@@ -7,7 +7,7 @@ import { baseName, isImagePath } from './paths'
 import { boxFor, cellsOf, forCell, MAX_COLUMNS, MAX_ROWS, parseBmp } from './pixels'
 import type { Blocks } from './pixels'
 import { makeThumb, saveBase64 } from './thumb'
-import type { Env, RunProcess } from './thumb'
+import type { Env, RunProcess, ThumbFiles, ThumbRequest } from './thumb'
 
 export type Deps = {
   /** `$.process.run`. */
@@ -60,46 +60,68 @@ const separator = (env: Env) => (env.platform === 'win32' ? '\\' : '/')
 /** `mcp__claude-in-chrome__computer` reads as `computer`. */
 const label = (tool: string) => tool.split('__').pop() || 'image'
 
-async function build(deps: Deps, env: Env, candidate: Candidate, options: ThumbOptions): Promise<Thumb | undefined> {
-  let openPath: string
-  let name: string
+/** Whether a file is one this call may show. */
+async function isShown(deps: Deps, candidate: Extract<Candidate, { kind: 'file' }>): Promise<boolean> {
+  const stat = await deps.stat(candidate.path)
+  if (stat?.kind !== 'file') return false
+  // A link named like an image may lead to a program, which a click would start.
+  if (stat.realPath !== undefined && !isImagePath(stat.realPath)) return false
 
+  return candidate.newerThan === undefined || stat.mtimeMs >= candidate.newerThan
+}
+
+/**
+ * The file a click opens, and its name; undefined when there is no image to
+ * show. A picture that came as bytes is saved first, so there is a file.
+ */
+async function sourceOf(
+  deps: Deps,
+  env: Env,
+  candidate: Candidate,
+  options: ThumbOptions,
+): Promise<{ openPath: string; name: string } | undefined> {
   if (candidate.kind === 'file') {
-    const stat = await deps.stat(candidate.path)
-    if (stat?.kind !== 'file') return undefined
-    // A link named like an image may lead to a program, which a click would start.
-    if (stat.realPath !== undefined && !isImagePath(stat.realPath)) return undefined
-    if (candidate.newerThan !== undefined && stat.mtimeMs < candidate.newerThan) return undefined
-    openPath = candidate.path
-    name = baseName(candidate.path)
-  } else {
-    const ext = EXTENSIONS[candidate.mediaType]
-    if (ext === undefined) return undefined
-    openPath = `${env.tempDir}${separator(env)}${options.id}.${ext}`
-    if (!(await saveBase64(deps.run, env, candidate.base64, openPath))) return undefined
-    name = `${label(options.tool)}.${ext}`
+    return (await isShown(deps, candidate)) ? { openPath: candidate.path, name: baseName(candidate.path) } : undefined
   }
 
-  const captionOnly = (width = 0, height = 0): Thumb => ({ openPath, name, width, height, columns: 0, rows: 0 })
+  const ext = EXTENSIONS[candidate.mediaType]
+  if (ext === undefined) return undefined
+  const openPath = `${env.tempDir}${separator(env)}${options.id}.${ext}`
+  if (!(await saveBase64(deps.run, env, candidate.base64, openPath))) return undefined
+
+  return { openPath, name: `${label(options.tool)}.${ext}` }
+}
+
+/** What the helper is asked to make of the image at `src`. */
+function requestOf(src: string, options: ThumbOptions, blocks: Blocks): ThumbRequest {
+  const request: ThumbRequest = { src, id: options.id, png: options.png, blocks }
+  if (options.columns !== undefined) request.columns = options.columns
+  if (options.rows !== undefined) request.rows = options.rows
+  if (options.six !== undefined) {
+    request.six = {
+      id: options.six,
+      width: (options.columns ?? MAX_COLUMNS) * SIXEL_CELL.width,
+      height: (options.rows ?? MAX_ROWS) * SIXEL_CELL.height,
+    }
+  }
+
+  return request
+}
+
+/** The PNG thumbnail a helper wrote, where there is one an `Image` element takes. */
+async function pngOf(deps: Deps, files: ThumbFiles): Promise<string | undefined> {
+  const png = files.pngPath === undefined ? undefined : await deps.readBase64(files.pngPath)
+
+  return png !== undefined && png.length <= MAX_PNG_BASE64 ? png : undefined
+}
+
+async function build(deps: Deps, env: Env, candidate: Candidate, options: ThumbOptions): Promise<Thumb | undefined> {
+  const source = await sourceOf(deps, env, candidate, options)
+  if (!source) return undefined
+  const captionOnly = (width = 0, height = 0): Thumb => ({ ...source, width, height, columns: 0, rows: 0 })
 
   const blocks = options.blocks ?? 'quarter'
-  const files = await makeThumb(deps.run, env, {
-    src: openPath,
-    id: options.id,
-    png: options.png,
-    blocks,
-    ...(options.columns === undefined ? {} : { columns: options.columns }),
-    ...(options.rows === undefined ? {} : { rows: options.rows }),
-    ...(options.six === undefined
-      ? {}
-      : {
-          six: {
-            id: options.six,
-            width: (options.columns ?? MAX_COLUMNS) * SIXEL_CELL.width,
-            height: (options.rows ?? MAX_ROWS) * SIXEL_CELL.height,
-          },
-        }),
-  })
+  const files = await makeThumb(deps.run, env, requestOf(source.openPath, options, blocks))
   if (!files) return captionOnly()
 
   const stored = await deps.readBase64(files.bmpPath)
@@ -110,8 +132,7 @@ async function build(deps: Deps, env: Env, candidate: Candidate, options: ThumbO
   const { down } = boxFor(blocks)
   const made = cellsOf(image.rgb, image.width, image.height, down)
   const thumb: Thumb = {
-    openPath,
-    name,
+    ...source,
     width: files.width,
     height: files.height,
     columns: made.columns,
@@ -126,10 +147,8 @@ async function build(deps: Deps, env: Env, candidate: Candidate, options: ThumbO
       rows: Math.ceil(files.six.height / SIXEL_CELL.height),
     }
   }
-  if (files.pngPath !== undefined) {
-    const png = await deps.readBase64(files.pngPath)
-    if (png !== undefined && png.length <= MAX_PNG_BASE64) thumb.png = png
-  }
+  const png = await pngOf(deps, files)
+  if (png !== undefined) thumb.png = png
 
   return thumb
 }

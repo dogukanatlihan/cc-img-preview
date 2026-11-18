@@ -9,6 +9,19 @@ test('an image is told by its extension, in any case', async () => {
   expect(isImagePath('png')).toBe(false)
 })
 
+test('a long run of dots in a command\'s output is read in no time', async () => {
+  const started = performance.now()
+
+  expect(scanImagePaths(`out ${'.'.repeat(200_000)}a end "b.png".`)).toEqual(['b.png'])
+  // The expression this loop replaced took 3.6 s for 80,000 dots.
+  expect(performance.now() - started).toBeLessThan(500)
+})
+
+test('what ends a sentence is taken off the end of a path, a run of it too', async () => {
+  expect(scanImagePaths('saved to out/a.png...')).toEqual(['out/a.png'])
+  expect(scanImagePaths('(see `plot.png`).')).toEqual(['plot.png'])
+})
+
 test('image paths are found in text once each, in order', async () => {
   expect(scanImagePaths('saved to out/plot.png and out/plot.png.')).toEqual(['out/plot.png'])
   expect(scanImagePaths('see (./b.webp), c.gif;')).toEqual(['./b.webp', 'c.gif'])
