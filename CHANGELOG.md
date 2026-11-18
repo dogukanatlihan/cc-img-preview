@@ -1,6 +1,14 @@
 # Changelog
 
-Versions follow [Semantic Versioning](https://semver.org). The version is the one in `.claude-plugin/plugin.json`, and each release has a git tag `v<version>`.
+Versions follow [Semantic Versioning](https://semver.org). The version is the one in `.claude-plugin/plugin.json`, and each release has a git tag: `cc-img--v<version>` from 0.2.1 on (the form `claude plugin tag` makes), `v<version>` before that.
+
+## 0.2.1 - 2026-11-18
+
+Install from a marketplace.
+
+- The repository is now a Claude Code marketplace (`.claude-plugin/marketplace.json`). One line installs the mod: `/plugin install cc-img --marketplace dogukanatlihan/cc-img-preview`.
+- `plugin.json` names the author, the repository, the license and keywords.
+- No change to what the mod does.
 
 ## 0.2.0 - 2026-11-18
 

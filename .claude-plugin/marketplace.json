@@ -1,0 +1,13 @@
+{
+  "name": "cc-img-preview",
+  "description": "Image thumbnails in the Claude Code transcript",
+  "owner": { "name": "Dogukan Atlihan", "url": "https://github.com/dogukanatlihan" },
+  "plugins": [
+    {
+      "name": "cc-img",
+      "source": "./",
+      "category": "productivity",
+      "tags": ["images", "thumbnails", "terminal", "iterm2", "kitty", "sixel"]
+    }
+  ]
+}

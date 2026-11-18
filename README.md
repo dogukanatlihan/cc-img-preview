@@ -4,6 +4,33 @@ A Claude Code mod that shows a small thumbnail in the terminal transcript for ev
 
 It was inspired by [hood/claude-kitty-image](https://github.com/hood/claude-kitty-image), which gives Claude a tool to show pictures on purpose. `cc-img` gives Claude no tool and changes nothing Claude reads: it watches what Claude does and draws the pictures for you.
 
+## Install
+
+At the prompt of a Claude Code session in a terminal:
+
+```
+/plugin install cc-img --marketplace dogukanatlihan/cc-img-preview
+```
+
+Answer `y` to add the marketplace, then choose a scope. The user scope, the first one, turns the mod on in every session. The mod is active at once, with no restart.
+
+From a shell:
+
+```
+claude plugin install cc-img --marketplace dogukanatlihan/cc-img-preview
+```
+
+The `--marketplace` option needs Claude Code 2.1.275 or later in a session, and 2.1.292 or later from a shell. On an older version, use two steps:
+
+```
+claude plugin marketplace add dogukanatlihan/cc-img-preview
+claude plugin install cc-img@cc-img-preview
+```
+
+In the desktop app, where `/plugin` does not run: click + next to the prompt box, then Plugins, Add marketplace with `dogukanatlihan/cc-img-preview`, then Add plugin.
+
+To get a later version: `claude plugin marketplace update cc-img-preview`, then `claude plugin update cc-img@cc-img-preview`. To remove the mod: `claude plugin uninstall cc-img@cc-img-preview`.
+
 ## What gets a thumbnail
 
 - Image files Claude reads.

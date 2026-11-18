@@ -1,6 +1,11 @@
 {
   "name": "cc-img",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Thumbnails for every image Claude touches, click to open",
+  "author": { "name": "Dogukan Atlihan", "url": "https://github.com/dogukanatlihan" },
+  "homepage": "https://github.com/dogukanatlihan/cc-img-preview",
+  "repository": "https://github.com/dogukanatlihan/cc-img-preview",
+  "license": "MIT",
+  "keywords": ["images", "thumbnails", "terminal", "iterm2", "kitty", "sixel"],
   "types": "./types/index.d.ts"
 }
