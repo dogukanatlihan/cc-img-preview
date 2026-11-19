@@ -19,7 +19,7 @@ The [Development](README.md#development) section of the README says which file d
 The fast loop, with [bun](https://bun.sh), for every test file that needs no Claude Code engine:
 
 ```
-bun test --preload ./tools/sonar/testing-shim.ts hooks/*.test.ts
+bun --config=tools/sonar/bunfig.toml test --preload ./tools/sonar/testing-shim.ts hooks/*.test.ts
 ```
 
 Before a pull request, from the clone's folder:

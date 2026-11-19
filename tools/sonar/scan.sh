@@ -21,7 +21,7 @@ version="$(sed -n 's/.*"version": "\(.*\)".*/\1/p' .claude-plugin/plugin.json)"
 # Coverage. `claude plugin test` is the mod's test runner and reports none, so
 # the test files that need no engine are run again under bun. hooks/register.tsx
 # runs only inside the engine: its 51 tests are real, and cannot be counted.
-bun test --preload ./tools/sonar/testing-shim.ts \
+bun --config=tools/sonar/bunfig.toml test --preload ./tools/sonar/testing-shim.ts \
   --coverage --coverage-reporter=lcov --coverage-dir=tools/sonar/coverage \
   hooks/*.test.ts
 

@@ -1,0 +1,5 @@
+# The JSX settings of .claude-plugin/types/tsconfig.json, for `bun test` in a
+# clone where Claude Code has not yet written that file (CI, a fresh fork).
+jsx = "react"
+jsxFactory = "h"
+jsxFragment = "Fragment"

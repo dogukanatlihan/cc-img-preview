@@ -20,7 +20,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       # The test files that need no Claude Code engine. hooks/register.tsx is
       # tested only by `claude plugin test .`, which needs Claude Code itself.
-      - run: bun test --preload ./tools/sonar/testing-shim.ts hooks/*.test.ts
+      - run: bun --config=tools/sonar/bunfig.toml test --preload ./tools/sonar/testing-shim.ts hooks/*.test.ts
         shell: bash
 
   windows-helpers:
