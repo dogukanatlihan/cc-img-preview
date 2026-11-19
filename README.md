@@ -212,8 +212,9 @@ SVG needs ImageMagick or `rsvg-convert`. On Windows and Linux, HEIC (`.heic`, `.
 | Windows 11, Windows Terminal 1.25 | Block thumbnails and the Sixel painter, both directly and inside herdr 0.9.5, with cc-img 0.2.3. The Windows helper and the `ffmpeg` path have been run on real files. The painter was split into smaller parts in 0.2.4 and has not been seen on screen since. |
 | macOS 27, iTerm2 3.7.7, Claude Code 2.1.327 | Block thumbnails for files Claude read and files a command wrote (png, jpg, webp, names with escaped spaces), a click on a thumbnail, `/img`, `/img cell 7x17`, and real pixels after a Yes in iTerm2's dialogs. The `sips` commands have been run by hand on png, jpg, gif, bmp, tif, webp, avif and ico files. |
 | macOS 27, Rex Beta 0.1.0 | Block thumbnails, and real pixels with `CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1`, the first picture of a session included, the thumbnail of a HEIC file a command wrote, and the thumbnails of two images pasted into one prompt. The two pictures at the top of this page were taken there. |
+| macOS 27, Ghostty 1.3.1, Claude Code 2.1.328 | Real pixels with no setting, for png and jpg files Claude read and a png a command wrote. |
 
-Not yet run on a real machine or terminal: Linux, kitty and Ghostty, tool screenshots on macOS, the file name link, and octant blocks on macOS.
+Not yet run on a real machine or terminal: Linux, kitty, Ghostty on Linux, tool screenshots on macOS, the file name link, and octant blocks on macOS.
 
 If you run the mod somewhere that is not in this table, a ["Tested on" issue](https://github.com/dogukanatlihan/cc-img-preview/issues/new?template=tested-on.yml) that says what you saw is welcome, whether it worked or not.
 
