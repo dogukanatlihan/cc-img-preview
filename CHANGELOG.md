@@ -2,6 +2,11 @@
 
 Versions follow [Semantic Versioning](https://semver.org). The version is the one in `.claude-plugin/plugin.json`, and each release has a git tag: `cc-img--v<version>` from 0.2.1 on (the form `claude plugin tag` makes), `v<version>` before that.
 
+## Unreleased
+
+- The repository is open for contributions: `CONTRIBUTING.md`, `SECURITY.md`, issue forms (one to report how the mod looks on a terminal) and a pull request template.
+- New: CI on GitHub Actions. It runs the tests on Linux, macOS and Windows, compiles the Windows painter with Windows PowerShell 5.1, and makes one thumbnail with the Windows helper.
+
 ## 0.2.4 - 2026-11-18
 
 Two faults a SonarQube scan found, and the code put in order after it.

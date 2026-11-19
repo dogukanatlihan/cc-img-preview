@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      # The test files that need no Claude Code engine. hooks/register.tsx is
+      # tested only by `claude plugin test .`, which needs Claude Code itself.
+      - run: bun test --preload ./tools/sonar/testing-shim.ts hooks/*.test.ts
+        shell: bash
+
+  windows-helpers:
+    name: Windows helpers
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Windows PowerShell 5.1, the one the mod runs: it compiles the painter
+      # with its own C# 5 compiler, the same way helpers/sixel.ps1 does.
+      - name: Compile the Sixel painter
+        shell: powershell
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          Add-Type -Path helpers/sixel.cs -ReferencedAssemblies System.Drawing
+          [CcImg.Watcher] | Out-Null
+      - name: Make a thumbnail with the Windows helper
+        shell: powershell
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'cc-img-ci'
+          & powershell -NoProfile -File helpers/thumb.ps1 -MakeDir $out
+          if ($LASTEXITCODE -ne 0) { throw "MakeDir exited $LASTEXITCODE" }
+          $size = & powershell -NoProfile -File helpers/thumb.ps1 -Src docs/blocks.png -OutDir $out -Id t -Png 1 -SixId s
+          if ($LASTEXITCODE -ne 0) { throw "thumb exited $LASTEXITCODE" }
+          Write-Output "helper printed: $size"
+          $json = $size | ConvertFrom-Json
+          if (-not ($json.w -gt 0 -and $json.h -gt 0 -and $json.sw -gt 0 -and $json.sh -gt 0)) { throw "unexpected output: $size" }
+          foreach ($f in 't.bmp', 't.png', 's.six.bmp') {
+            if (-not (Test-Path (Join-Path $out $f))) { throw "missing $f" }
+          }
