@@ -6,6 +6,7 @@ Versions follow [Semantic Versioning](https://semver.org). The version is the on
 
 - The repository is open for contributions: `CONTRIBUTING.md`, `SECURITY.md`, issue forms (one to report how the mod looks on a terminal) and a pull request template.
 - README: Ghostty 1.3.1 on macOS seen drawing real pixels with no setting.
+- README: a Screenshots section, a diagram of the Windows painter, and a call for kitty testers.
 - New: CI on GitHub Actions. It runs the tests on Linux, macOS and Windows, compiles the Windows painter with Windows PowerShell 5.1, and makes one thumbnail with the Windows helper.
 
 ## 0.2.4 - 2026-11-18

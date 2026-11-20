@@ -10,6 +10,16 @@ Image thumbnails in the Claude Code transcript. When Claude reads, writes or rec
 
 `cc-img` is a Claude Code mod: a plugin that changes Claude Code's own interface. It gives Claude no tool and changes nothing Claude reads. It watches what Claude does and draws the pictures for you.
 
+## Screenshots
+
+Real captures from Ghostty 1.3.1 on macOS. Only the frames and the words around them were added.
+
+| | |
+| --- | --- |
+| ![Before: only "Read 1 file". After: the picture of the lake under the same tool call.](docs/before-after.jpg) | ![Thumbnails of a dashboard, a chart and an icon Claude read, and of a screen a command wrote.](docs/kinds.jpg) |
+| ![A real-pixel thumbnail of a lake under "Read 1 file", with the install command.](docs/hero.jpg) | ![A real-pixel thumbnail of a fox icon in Ghostty.](docs/ghostty.jpg) |
+
+- [Screenshots](#screenshots)
 - [Install](#install)
 - [What gets a thumbnail](#what-gets-a-thumbnail)
 - [Commands](#commands)
@@ -131,6 +141,8 @@ The same lines, with the other terminal's `TERM_PROGRAM`, work for any terminal 
 
 Windows Terminal draws pictures only as Sixel, and Claude Code gives a mod no way to send Sixel. So here the mod goes around Claude Code:
 
+<img src="docs/windows-painter.jpg" width="420" alt="Three steps: cc-img draws a block thumbnail with marker cells, a background painter finds the markers, it paints the picture over those rows as Sixel.">
+
 - Under the tool call it draws the block-character thumbnail, and hides a marker in the first five cells of each row.
 - It starts one background process for the session (`helpers/sixel.ps1`, about 90 MB), which reads Claude Code's screen, finds the markers, and paints the picture over those rows itself. It ends when Claude Code does.
 - The picture itself takes no click: a button redraws under the pointer, which wipes the picture there. Open the image with the `open` button beside its name, or `/img`.
@@ -221,6 +233,10 @@ If you run the mod somewhere that is not in this table, a ["Tested on" issue](ht
 ## Contributing
 
 Reports, fixes and new terminals are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) says how to run the mod from a clone, which checks to run, and what helps the most now. Report a security problem privately, as [SECURITY.md](SECURITY.md) says.
+
+kitty users most of all: the mod should draw real pixels there, but nobody has seen it yet. Tell us in [issue #2](https://github.com/dogukanatlihan/cc-img-preview/issues/2) what you see.
+
+<img src="docs/kitty-wanted.jpg" width="360" alt="A real-pixel chart thumbnail, shown in Ghostty, with the question: kitty users, does it look like this for you?">
 
 ## Development
 
